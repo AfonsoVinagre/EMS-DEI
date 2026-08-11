@@ -13,7 +13,13 @@ public enum ErrorMessage {
 	CANNOT_IMPERSONATE_SELF("Não é possível personificar a própria conta.", 2002),
 	NOT_AUTHENTICATED("Não autenticado.", 2003),
 	NOT_IMPERSONATING("Não está a personificar nenhuma conta.", 2004),
-	ACCESS_DENIED("Não tem permissões para executar esta ação.", 2005);
+	ACCESS_DENIED("Não tem permissões para executar esta ação.", 2005),
+
+	PERSON_NOT_TEACHER("A pessoa com o ID %s não é um professor.", 3001),
+	NO_SUCH_SCHOOL("Não existe nenhuma escola com o ID %s", 3002),
+	NO_SUCH_SUBJECT("Não existe nenhuma disciplina com o ID %s", 3003),
+	TEACHER_ASSIGNMENT_ALREADY_EXISTS("Este professor já está associado a esta escola e disciplina.", 3004),
+	NO_SUCH_TEACHER_ASSIGNMENT("Não existe nenhuma associação com o ID %s", 3005);
 
 	private final String label;
 	private final int code;
