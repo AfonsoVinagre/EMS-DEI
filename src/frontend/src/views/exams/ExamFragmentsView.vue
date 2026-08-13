@@ -1,0 +1,379 @@
+<template>
+  <v-btn
+    icon="mdi-arrow-left"
+    size="small"
+    variant="text"
+    :to="'/exams'"
+    title="Voltar aos exames"
+  ></v-btn>
+  <h2 class="text-left ml-1">
+    Fragmentos do exame #{{ examId }}
+    <span v-if="exam" class="text-medium-emphasis text-h6">
+      ({{ exam.originalFilename }} — {{ exam.status }})
+    </span>
+  </h2>
+
+  <v-row v-if="exam">
+    <v-col cols="12" md="6">
+      <strong>Aluno:</strong> {{ exam.studentName }}
+    </v-col>
+    <v-col cols="12" md="6">
+      <strong>Escola:</strong> {{ exam.schoolName }}
+    </v-col>
+    <v-col cols="12" md="6">
+      <strong>Disciplina:</strong> {{ exam.subjectName }}
+    </v-col>
+  </v-row>
+
+  <v-data-table
+    :headers="headers"
+    :items="fragments"
+    :loading="loading"
+    item-key="id"
+    class="text-left"
+    no-data-text="Este exame ainda não tem fragmentos."
+    @click:row="onRow"
+  >
+    <template v-slot:[`item.actions`]="{ item }">
+      <v-btn
+        v-if="canRequestRevision(item)"
+        icon="mdi-reload"
+        size="small"
+        color="primary"
+        title="Pedir revisão"
+        :loading="busyIds.has(item.id ?? -1)"
+        @click.stop="onRequestRevision(item)"
+      ></v-btn>
+    </template>
+  </v-data-table>
+
+  <v-dialog v-model="drawer" max-width="900">
+    <v-card v-if="selected">
+      <v-card-title>
+        Fragmento #{{ selected.id }} — página {{ selected.pageNumber }}
+      </v-card-title>
+      <v-card-text>
+        <div class="text-left mb-2">
+          <strong>Estado:</strong> {{ selected.status }}
+        </div>
+        <v-img
+          v-if="imageUrl"
+          :src="imageUrl"
+          max-height="700"
+          contain
+        ></v-img>
+        <v-progress-circular v-else indeterminate color="primary"></v-progress-circular>
+
+        <v-divider class="my-4"></v-divider>
+        <h3 class="text-left">Histórico de tarefas</h3>
+        <v-data-table
+          :headers="taskHeaders"
+          :items="tasks"
+          :loading="loadingTasks"
+          item-key="id"
+          no-data-text="Sem tarefas."
+          class="text-left"
+        >
+          <template v-slot:[`item.actions`]="{ item }">
+            <v-btn
+              v-if="auth.hasPermission('EXAM_LOCK') && item.teacherId"
+              icon="mdi-account-switch"
+              size="small"
+              color="primary"
+              :disabled="!allTeachers.length"
+              title="Reatribuir professor"
+              @click="onReassign(item)"
+            ></v-btn>
+            <v-btn
+              v-if="canSubmit(item)"
+              color="primary"
+              size="small"
+              variant="tonal"
+              @click="openGrade(item)"
+            >
+              Submeter nota
+            </v-btn>
+            <span v-else-if="item.status === 'SUBMITTED'" class="text-success">
+              ✓ {{ item.grade }}
+            </span>
+          </template>
+        </v-data-table>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn text="Fechar" @click="closeDrawer"></v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <v-dialog v-model="gradeDialog" max-width="400">
+    <v-card v-if="grading">
+      <v-card-title>
+        Submeter nota —
+        {{ grading.teacherName }} (fragmento {{ grading.fragmentId }})
+      </v-card-title>
+      <v-card-text>
+        <v-text-field
+          v-model.number="gradeInput"
+          type="number"
+          min="0"
+          label="Nota"
+          :rules="[(v: number) => (v == null || v < 0) ? 'A nota não pode ser negativa' : true]"
+        ></v-text-field>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn text="Cancelar" @click="gradeDialog = false"></v-btn>
+        <v-btn color="primary" :disabled="gradeInput == null || gradeInput < 0" text="Submeter" @click="submitGrade"></v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <v-dialog v-model="reassignDialog" max-width="500">
+    <v-card>
+      <v-card-title>Reatribuir tarefa</v-card-title>
+      <v-card-text>
+        <v-select
+          v-if="reassigning"
+          v-model="reassignTeacherId"
+          :items="eligibleReassignTeachers"
+          item-title="name"
+          item-value="id"
+          label="Novo professor"
+        ></v-select>
+        <div v-if="!eligibleReassignTeachers.length" class="text-warning">
+          Não há professores elegíveis (todos os disponíveis já corrigiram este fragmento).
+        </div>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn text="Cancelar" @click="reassignDialog = false"></v-btn>
+        <v-btn
+          color="primary"
+          text="Reatribuir"
+          :disabled="!reassignTeacherId"
+          @click="confirmReassign"
+        ></v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <v-dialog v-model="revisionDialog" max-width="500">
+    <v-card>
+      <v-card-title>Pedir revisão do fragmento {{ revisionFor?.id }}</v-card-title>
+      <v-card-text>
+        <v-select
+          v-if="revisionFor"
+          v-model="revisionTeacherId"
+          :items="eligibleRevisionTeachers"
+          item-title="name"
+          item-value="id"
+          label="Professor revisor"
+        ></v-select>
+        <div v-if="!eligibleRevisionTeachers.length" class="text-warning">
+          Sem professores elegíveis para revisão.
+        </div>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn text="Cancelar" @click="revisionDialog = false"></v-btn>
+        <v-btn
+          color="primary"
+          text="Criar revisão"
+          :disabled="!revisionTeacherId"
+          @click="confirmRevision"
+        ></v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+</template>
+
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import type ExamDto from '@/models/ExamDto'
+import type FragmentDto from '@/models/FragmentDto'
+import type CorrectionTaskDto from '@/models/CorrectionTaskDto'
+import type PersonDto from '@/models/PersonDto'
+import RemoteService from '@/services/RemoteService'
+import { useAuthStore } from '@/stores/auth'
+
+const route = useRoute()
+const auth = useAuthStore()
+
+const examId = Number(route.params.id as string)
+
+const exam = ref<ExamDto | null>(null)
+const fragments = ref<FragmentDto[]>([])
+const loading = ref(false)
+const selected = ref<FragmentDto | null>(null)
+const drawer = ref(false)
+const imageUrl = ref<string | null>(null)
+const tasks = ref<CorrectionTaskDto[]>([])
+const loadingTasks = ref(false)
+const busyIds = reactive(new Set<number>())
+
+const allTeachers = ref<PersonDto[]>([])
+
+const gradeDialog = ref(false)
+const grading = ref<CorrectionTaskDto | null>(null)
+const gradeInput = ref<number | null>(null)
+
+const reassignDialog = ref(false)
+const reassigning = ref<CorrectionTaskDto | null>(null)
+const reassignTeacherId = ref<number | undefined>(undefined)
+
+const revisionDialog = ref(false)
+const revisionFor = ref<FragmentDto | null>(null)
+const revisionTeacherId = ref<number | undefined>(undefined)
+
+const headers = [
+  { title: 'ID', key: 'id', value: 'id', sortable: true },
+  { title: 'Página', key: 'pageNumber', value: 'pageNumber', sortable: true },
+  { title: 'Disciplina', key: 'subjectName', value: 'subjectName', sortable: true },
+  { title: 'Estado', key: 'status', value: 'status', sortable: true },
+  { title: 'Ações', key: 'actions', value: 'actions', sortable: false }
+]
+
+const taskHeaders = [
+  { title: 'Fase', key: 'phase', value: 'phase', sortable: true },
+  { title: 'Professor', key: 'teacherName', value: 'teacherName', sortable: true },
+  { title: 'Estado', key: 'status', value: 'status', sortable: true },
+  { title: 'Nota', key: 'grade', value: 'grade', sortable: false },
+  { title: 'Ações', key: 'actions', value: 'actions', sortable: false }
+]
+
+function canRequestRevision(f: FragmentDto): boolean {
+  return (
+    auth.hasPermission('EXAM_LOCK') &&
+    (f.status === 'CORRECTED' || f.status === 'IN_REVISION' ||
+      f.status === 'IN_CORRECTION' || f.status === 'UNASSIGNED')
+  )
+}
+
+function canSubmit(t: CorrectionTaskDto): boolean {
+  if (t.status === 'SUBMITTED') return false
+  if (t.teacherId == null) return false
+  // Teachers can only submit on tasks where they are the assigned teacher.
+  if (auth.isAdmin || auth.hasPermission('EXAM_LOCK')) {
+    // Admins can also submit on anyone's behalf (handy during testing).
+    return true
+  }
+  return auth.user?.id === t.teacherId
+}
+
+const eligibleReassignTeachers = computed(() => {
+  if (!reassigning.value) return []
+  return allTeachers.value.filter((t) => t.id !== reassigning.value!.teacherId)
+})
+
+const eligibleRevisionTeachers = computed(() => {
+  if (!revisionFor.value) return []
+  const usedIds = new Set(tasks.value.map((t) => t.teacherId).filter(Boolean))
+  return allTeachers.value.filter((t) => !usedIds.has(t.id))
+})
+
+onMounted(async () => {
+  try {
+    exam.value = await RemoteService.getExams().then((all) => all.find((e) => e.id === examId) ?? null)
+  } catch { /* ignore */ }
+  try {
+    const people = await RemoteService.getPeople()
+    allTeachers.value = people.filter((p) => p.type === 'TEACHER')
+  } catch { /* ignore */ }
+  await refreshFragments()
+})
+
+onBeforeUnmount(() => {
+  if (imageUrl.value) URL.revokeObjectURL(imageUrl.value)
+})
+
+async function refreshFragments() {
+  loading.value = true
+  try {
+    fragments.value = await RemoteService.getFragmentsByExam(examId)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function onRow(_: Event, row: { item: FragmentDto }) {
+  await openFragment(row.item)
+}
+
+async function openFragment(f: FragmentDto) {
+  selected.value = f
+  drawer.value = true
+  if (imageUrl.value) {
+    URL.revokeObjectURL(imageUrl.value)
+    imageUrl.value = null
+  }
+  if (f.id != null) {
+    try {
+      imageUrl.value = await RemoteService.getFragmentImageUrl(f.id)
+    } catch {
+      imageUrl.value = null
+    }
+    await loadTasks(f.id)
+  }
+}
+
+async function loadTasks(fragmentId: number) {
+  loadingTasks.value = true
+  try {
+    tasks.value = await RemoteService.getFragmentTasks(fragmentId)
+  } catch {
+    tasks.value = []
+  } finally {
+    loadingTasks.value = false
+  }
+}
+
+function closeDrawer() {
+  drawer.value = false
+  if (imageUrl.value) {
+    URL.revokeObjectURL(imageUrl.value)
+    imageUrl.value = null
+  }
+}
+
+function openGrade(t: CorrectionTaskDto) {
+  grading.value = t
+  gradeInput.value = t.grade ?? 0
+  gradeDialog.value = true
+}
+
+async function submitGrade() {
+  if (!grading.value || gradeInput.value == null || gradeInput.value < 0) return
+  await RemoteService.submitGrade(grading.value.id!, gradeInput.value)
+  gradeDialog.value = false
+  if (selected.value?.id != null) await loadTasks(selected.value.id)
+}
+
+function onReassign(t: CorrectionTaskDto) {
+  reassigning.value = t
+  reassignTeacherId.value = undefined
+  reassignDialog.value = true
+}
+
+async function confirmReassign() {
+  if (!reassigning.value || !reassignTeacherId.value) return
+  await RemoteService.reassignTask(reassigning.value.id!, reassignTeacherId.value)
+  reassignDialog.value = false
+  if (selected.value?.id != null) await loadTasks(selected.value.id)
+}
+
+function onRequestRevision(f: FragmentDto) {
+  revisionFor.value = f
+  revisionTeacherId.value = undefined
+  revisionDialog.value = true
+}
+
+async function confirmRevision() {
+  if (!revisionFor.value || !revisionTeacherId.value) return
+  await RemoteService.requestRevision(revisionFor.value.id!, revisionTeacherId.value)
+  revisionDialog.value = false
+  if (selected.value?.id != null) await loadTasks(selected.value.id)
+  await refreshFragments()
+}
+</script>

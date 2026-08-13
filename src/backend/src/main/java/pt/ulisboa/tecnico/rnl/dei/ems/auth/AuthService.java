@@ -127,6 +127,8 @@ public class AuthService {
 				person.getType().name(),
 				permissions,
 				impersonating,
-				impersonatorEmail);
+				impersonatorEmail,
+				person.getSchool() == null ? null : person.getSchool().getId(),
+				person.getSchool() == null ? null : person.getSchool().getName());
 	}
 }

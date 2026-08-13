@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 
 import lombok.Data;
 import lombok.ToString;
+import pt.ulisboa.tecnico.rnl.dei.ems.school.domain.School;
 
 // Domain class representing a person in the system.
 // A person is also a login account: it has an email + password, and its
@@ -41,6 +42,13 @@ public class Person {
 	@Enumerated(EnumType.STRING)
     private PersonType type;
 
+	// The school this person belongs to. NULL for ADMINISTRATOR (admins
+	// operate across all schools). Mandatory in practice for SCHOOL_STAFF,
+	// TEACHER and STUDENT — enforced at the service layer.
+	@ManyToOne
+	@JoinColumn(name = "school_id")
+	private School school;
+
 	protected Person() {
 	}
 
@@ -49,5 +57,13 @@ public class Person {
 		this.email = email;
 		this.password = password;
 		this.type = type;
+	}
+
+	public Person(String name, String email, String password, PersonType type, School school) {
+		this.name = name;
+		this.email = email;
+		this.password = password;
+		this.type = type;
+		this.school = school;
 	}
 }

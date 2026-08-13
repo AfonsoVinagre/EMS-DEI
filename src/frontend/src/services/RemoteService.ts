@@ -9,6 +9,14 @@ import type SchoolDto from '@/models/SchoolDto'
 import type SubjectDto from '@/models/SubjectDto'
 import type TeacherAssignmentDto from '@/models/TeacherAssignmentDto'
 import type ExamDto from '@/models/ExamDto'
+import type FragmentDto from '@/models/FragmentDto'
+import type CorrectionTaskDto from '@/models/CorrectionTaskDto'
+import type SystemStateDto from '@/models/SystemStateDto'
+
+export interface SegmentAllResult {
+  examIds: number[]
+  failures: { examId: number; errorCode: number }[]
+}
 
 const httpClient = axios.create()
 httpClient.defaults.timeout = 50000
@@ -77,14 +85,16 @@ export default class RemoteServices {
   static async uploadExam(
     file: File,
     studentId: number,
-    schoolId: number,
-    subjectId: number
+    subjectId: number,
+    schoolId?: number | null
   ): Promise<ExamDto> {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('studentId', String(studentId))
-    formData.append('schoolId', String(schoolId))
     formData.append('subjectId', String(subjectId))
+    if (schoolId !== undefined && schoolId !== null) {
+      formData.append('schoolId', String(schoolId))
+    }
     return httpClient.post('/exams', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
@@ -95,6 +105,79 @@ export default class RemoteServices {
     subjectId: number
   ): Promise<ExamDto[]> {
     return httpClient.get(`/exams/school/${schoolId}/subject/${subjectId}`)
+  }
+
+  static async segmentExam(id: number): Promise<ExamDto> {
+    return httpClient.post(`/exams/${id}/segment`)
+  }
+
+  static async segmentAllExams(): Promise<SegmentAllResult> {
+    return httpClient.post('/exams/segment-all')
+  }
+
+  static async distributeExam(id: number): Promise<ExamDto> {
+    return httpClient.post(`/exams/${id}/distribute`)
+  }
+
+  // --- Fragments ---
+  static async getFragments(): Promise<FragmentDto[]> {
+    return httpClient.get('/fragments')
+  }
+
+  static async getFragmentsByExam(examId: number): Promise<FragmentDto[]> {
+    return httpClient.get(`/fragments/exam/${examId}`)
+  }
+
+  static async getFragmentImageUrl(fragmentId: number): Promise<string> {
+    // The HTTP client sends the JWT in a separate Authorization header on
+    // blob fetches too, but <img src=...> can't have custom headers — so
+    // we download as a blob via the (JWT-injecting) httpClient and turn it
+    // into an object URL. The caller is responsible for revoking.
+    // The response interceptor unwraps response.data, so the result is a Blob.
+    const blob = (await httpClient.get(`/fragments/${fragmentId}/image`, {
+      responseType: 'blob'
+    })) as unknown as Blob
+    return URL.createObjectURL(blob)
+  }
+
+  static async getFragmentImageBlob(fragmentId: number): Promise<Blob> {
+    return (await httpClient.get(`/fragments/${fragmentId}/image`, {
+      responseType: 'blob'
+    })) as unknown as Blob
+  }
+
+  static async getFragmentTasks(fragmentId: number): Promise<CorrectionTaskDto[]> {
+    return httpClient.get(`/fragments/${fragmentId}/tasks`)
+  }
+
+  // --- Correction tasks ---
+  static async getCorrectionTasks(): Promise<CorrectionTaskDto[]> {
+    return httpClient.get('/correction-tasks')
+  }
+
+  static async submitGrade(taskId: number, grade: number): Promise<CorrectionTaskDto> {
+    return httpClient.patch(`/correction-tasks/${taskId}/score`, { grade })
+  }
+
+  static async reassignTask(taskId: number, teacherId: number): Promise<CorrectionTaskDto> {
+    return httpClient.patch(`/correction-tasks/${taskId}`, { teacherId })
+  }
+
+  static async requestRevision(fragmentId: number, teacherId: number): Promise<CorrectionTaskDto> {
+    return httpClient.post(`/fragments/${fragmentId}/revision?teacherId=${teacherId}`)
+  }
+
+  // --- System state ---
+  static async getSystemState(): Promise<SystemStateDto> {
+    return httpClient.get('/system-state')
+  }
+
+  static async lockUploads(): Promise<SystemStateDto> {
+    return httpClient.post('/system-state/lock')
+  }
+
+  static async unlockUploads(): Promise<SystemStateDto> {
+    return httpClient.post('/system-state/unlock')
   }
 
   // --- Authentication ---

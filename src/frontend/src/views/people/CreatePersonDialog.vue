@@ -28,6 +28,16 @@
             required
             v-model="newPerson.type"
             ></v-select>
+
+          <v-select
+            v-model="newPerson.schoolId"
+            :items="schools"
+            :loading="loadingSchools"
+            item-title="name"
+            item-value="id"
+            label="Escola (obrigatória para Funcionário/Professor/Aluno)"
+            clearable
+          ></v-select>
         </v-card-text>
 
         <v-divider></v-divider>
@@ -55,6 +65,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type PersonDto from '@/models/PersonDto'
+import type SchoolDto from '@/models/SchoolDto'
 import RemoteService from '@/services/RemoteService'
 
 const dialog = ref(false)
@@ -68,11 +79,23 @@ const typeMappings = {
   'Aluno': 'STUDENT'
 }
 
+const schools = ref<SchoolDto[]>([])
+const loadingSchools = ref(true)
+
+;(async () => {
+  try {
+    schools.value = await RemoteService.getSchools()
+  } finally {
+    loadingSchools.value = false
+  }
+})()
+
 const newPerson = ref<PersonDto>({
   name: '',
   email: '',
   password: '',
-  type: ''
+  type: '',
+  schoolId: null
 })
 
 const savePerson = async () => {
@@ -82,7 +105,8 @@ const savePerson = async () => {
     name: '',
     email: '',
     password: '',
-    type: ''
+    type: '',
+    schoolId: null
   }
   emit('person-created')
 }

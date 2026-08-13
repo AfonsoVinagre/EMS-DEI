@@ -21,3 +21,4 @@ security.jwt.expiration-ms=86400000
 
 ## File storage
 ems.storage.exams-dir=./data/exams
+ems.storage.fragments-dir=./data/fragments

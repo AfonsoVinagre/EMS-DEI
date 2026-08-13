@@ -32,11 +32,11 @@
       <v-chip v-if="item.type === 'ADMINISTRATOR'" color="purple" text-color="white">
         Administrador
       </v-chip>
-      <v-chip v-else-if="item.type === 'MAIN_TEACHER'" color="red" text-color="white">
-        Professor Regente
+      <v-chip v-else-if="item.type === 'TEACHER'" color="red" text-color="white">
+        Professor
       </v-chip>
-      <v-chip v-else-if="item.type === 'TEACHING_ASSISTANT'" color="blue" text-color="white">
-        Professor Assistente
+      <v-chip v-else-if="item.type === 'SCHOOL_STAFF'" color="orange" text-color="white">
+        Funcionário
       </v-chip>
       <v-chip v-else color="green" text-color="white">
         Aluno
@@ -59,7 +59,7 @@
 </template>
 
 <script setup lang="ts">
-import type PeopleDto from '@/models/PeopleDto'
+import type PeopleDto from '@/models/PersonDto'
 import RemoteService from '@/services/RemoteService'
 import CreatePersonDialog from './CreatePersonDialog.vue'
 import { reactive, ref } from 'vue'

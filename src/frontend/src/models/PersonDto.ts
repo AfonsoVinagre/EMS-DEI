@@ -6,6 +6,11 @@ export default class PersonDto {
   password?: string
   type?: string
 
+  // Null for ADMINISTRATOR; required for SCHOOL_STAFF/TEACHER/STUDENT.
+  // The backend enforces these rules on create/update.
+  schoolId?: number | null
+  schoolName?: string | null
+
   constructor(obj?: Partial<PersonDto>) {
     Object.assign(this, obj)
   }

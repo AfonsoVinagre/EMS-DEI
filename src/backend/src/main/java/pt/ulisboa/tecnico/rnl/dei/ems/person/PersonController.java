@@ -12,8 +12,12 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
+import pt.ulisboa.tecnico.rnl.dei.ems.exceptions.DEIException;
+import pt.ulisboa.tecnico.rnl.dei.ems.exceptions.ErrorMessage;
+import pt.ulisboa.tecnico.rnl.dei.ems.person.domain.Person;
 import pt.ulisboa.tecnico.rnl.dei.ems.person.dto.PersonDto;
 import pt.ulisboa.tecnico.rnl.dei.ems.person.service.PersonService;
+import pt.ulisboa.tecnico.rnl.dei.ems.security.SecurityUtils;
 
 @RestController
 public class PersonController {
@@ -23,7 +27,11 @@ public class PersonController {
 	@GetMapping("/people")
 	@PreAuthorize("hasAuthority('PERSON_READ')")
 	public List<PersonDto> getPeople() {
-		return personService.getPeople();
+		Person current = SecurityUtils.currentPerson();
+		if (current == null) {
+			throw new DEIException(ErrorMessage.NOT_AUTHENTICATED);
+		}
+		return personService.getPeople(current);
 	}
 
 	@PostMapping("/people")

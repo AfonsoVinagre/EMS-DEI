@@ -35,7 +35,25 @@ public enum ErrorMessage {
 	NO_SUCH_EXAM("Não existe nenhum exame com o ID %s", 4001),
 	PERSON_NOT_STUDENT("A pessoa com o ID %s não é um aluno.", 4002),
 	INVALID_PDF_FILE("O ficheiro submetido não é um PDF válido.", 4003),
-	FILE_STORAGE_ERROR("Erro ao guardar o ficheiro no servidor.", 4004);
+	FILE_STORAGE_ERROR("Erro ao guardar o ficheiro no servidor.", 4004),
+
+	NO_SUCH_FRAGMENT("Não existe nenhum fragmento com o ID %s", 5010),
+	EXAM_NOT_SEGMENTABLE("O exame não pode ser segmentado no estado atual (%s).", 5011),
+	EXAM_NOT_DISTRIBUTABLE("O exame não pode ser distribuído no estado atual (%s).", 5013),
+	PDF_RENDER_ERROR("Erro ao processar o PDF do exame.", 5014),
+	FRAGMENT_IMAGE_NOT_FOUND("A imagem do fragmento não foi encontrada no servidor.", 5015),
+	NO_SUCH_CORRECTION_TASK("Não existe nenhuma tarefa de correção com o ID %s", 5016),
+	TASK_NOT_OPEN("A tarefa de correção já foi submetida.", 5017),
+	NOT_THE_ASSIGNED_TEACHER("Não é o professor atribuído a esta tarefa.", 5018),
+	TEACHER_CANNOT_REVISE_HIMSELF("O professor que fez uma tarefa anterior não pode ser atribuído a uma revisão do mesmo fragmento.", 5019),
+	NO_TEACHER_FOR_SUBJECT("Não há professores disponíveis para a disciplina deste exame.", 5020),
+	GRADE_NOT_VALID("A nota atribuída tem de ser maior ou igual a zero.", 5021),
+	SUBJECT_NOT_ASSIGNED("A correção não está atribuída a este fragmento.", 5022),
+	EXAM_UPLOADS_GLOBALLY_LOCKED("Os uploads de exames estão bloqueados neste momento.", 5023),
+	EXAMS_NOT_ALL_SEGMENTED("Não é possível bloquear enquanto houver exames não segmentados.", 5024),
+	STAFF_UPLOAD_TO_OTHER_SCHOOL("Só pode submeter exames de alunos da sua escola.", 5025),
+	PERSON_SCHOOL_REQUIRED("Esta conta tem de ter uma escola atribuída.", 5026),
+	PERSON_SCHOOL_NOT_APPLICABLE("Um administrador não tem escola atribuída.", 5027);
 
 	private final String label;
 	private final int code;

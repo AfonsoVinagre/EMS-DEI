@@ -16,6 +16,7 @@ import pt.ulisboa.tecnico.rnl.dei.ems.exceptions.DEIException;
 import pt.ulisboa.tecnico.rnl.dei.ems.exceptions.ErrorMessage;
 import pt.ulisboa.tecnico.rnl.dei.ems.exam.dto.ExamDto;
 import pt.ulisboa.tecnico.rnl.dei.ems.exam.service.ExamService;
+import pt.ulisboa.tecnico.rnl.dei.ems.exam.service.ExamService.SegmentAllResult;
 import pt.ulisboa.tecnico.rnl.dei.ems.person.domain.Person;
 import pt.ulisboa.tecnico.rnl.dei.ems.security.SecurityUtils;
 
@@ -30,7 +31,7 @@ public class ExamController {
 	public ExamDto uploadExam(
 			@RequestParam("file") MultipartFile file,
 			@RequestParam long studentId,
-			@RequestParam long schoolId,
+			@RequestParam(required = false) Long schoolId,
 			@RequestParam long subjectId) {
 		Person current = SecurityUtils.currentPerson();
 		if (current == null) {
@@ -42,7 +43,11 @@ public class ExamController {
 	@GetMapping("/exams")
 	@PreAuthorize("hasAuthority('EXAM_READ')")
 	public List<ExamDto> listAll() {
-		return examService.listAll();
+		Person current = SecurityUtils.currentPerson();
+		if (current == null) {
+			throw new DEIException(ErrorMessage.NOT_AUTHENTICATED);
+		}
+		return examService.listAll(current);
 	}
 
 	@GetMapping("/exams/{id}")
@@ -61,5 +66,23 @@ public class ExamController {
 	@PreAuthorize("hasAuthority('EXAM_READ')")
 	public List<ExamDto> listBySchoolAndSubject(@PathVariable long schoolId, @PathVariable long subjectId) {
 		return examService.listBySchoolAndSubject(schoolId, subjectId);
+	}
+
+	@PostMapping("/exams/{id}/segment")
+	@PreAuthorize("hasAuthority('EXAM_SEGMENT')")
+	public ExamDto segment(@PathVariable long id) {
+		return examService.segment(id);
+	}
+
+	@PostMapping("/exams/segment-all")
+	@PreAuthorize("hasAuthority('EXAM_SEGMENT')")
+	public SegmentAllResult segmentAll() {
+		return examService.segmentAll();
+	}
+
+	@PostMapping("/exams/{id}/distribute")
+	@PreAuthorize("hasAuthority('EXAM_LOCK')")
+	public ExamDto distribute(@PathVariable long id) {
+		return examService.distribute(id);
 	}
 }

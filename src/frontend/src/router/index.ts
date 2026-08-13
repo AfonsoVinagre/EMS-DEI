@@ -7,7 +7,15 @@ import SchoolsView from '@/views/schools/SchoolsView.vue'
 import SubjectsView from '@/views/subjects/SubjectsView.vue'
 import TeacherAssignmentsView from '@/views/teacherassignments/TeacherAssignmentsView.vue'
 import ExamsView from '@/views/exams/ExamsView.vue'
+import ExamFragmentsView from '@/views/exams/ExamFragmentsView.vue'
 import { useAuthStore } from '@/stores/auth'
+
+// Roles that may enter each page (in addition to the permission check).
+// During impersonation, auth.user.role reflects the *impersonated* role, so
+// admin impersonating staff effectively becomes a staff-equivalent for
+// navigation.
+const EXAM_ROLES = ['ADMINISTRATOR', 'SCHOOL_STAFF', 'TEACHER', 'STUDENT']
+const ADMIN_ONLY = ['ADMINISTRATOR']
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -27,43 +35,54 @@ const router = createRouter({
       path: '/people',
       name: 'people',
       component: PeopleView,
-      meta: { permission: 'PERSON_READ' }
+      meta: { permission: 'PERSON_READ', allowedRoles: ADMIN_ONLY }
     },
     {
       path: '/statistics',
       name: 'statistics',
       component: StatisticsView,
-      meta: { permission: 'STATISTICS_READ' }
+      meta: { permission: 'STATISTICS_READ', allowedRoles: ADMIN_ONLY }
     },
     {
       path: '/schools',
       name: 'schools',
       component: SchoolsView,
-      meta: { permission: 'SCHOOL_READ' }
+      meta: { permission: 'SCHOOL_READ', allowedRoles: ADMIN_ONLY }
     },
     {
       path: '/subjects',
       name: 'subjects',
       component: SubjectsView,
-      meta: { permission: 'SUBJECT_READ' }
+      meta: { permission: 'SUBJECT_READ', allowedRoles: ADMIN_ONLY }
     },
     {
       path: '/teacher-assignments',
       name: 'teacher-assignments',
       component: TeacherAssignmentsView,
-      meta: { permission: 'TEACHER_ASSIGNMENT_READ' }
+      meta: { permission: 'TEACHER_ASSIGNMENT_READ', allowedRoles: ADMIN_ONLY }
     },
     {
       path: '/exams',
       name: 'exams',
       component: ExamsView,
-      meta: { permission: 'EXAM_READ' }
+      meta: { permission: 'EXAM_READ', allowedRoles: EXAM_ROLES }
+    },
+    {
+      path: '/exams/:id/fragments',
+      name: 'exam-fragments',
+      component: ExamFragmentsView,
+      meta: { permission: 'EXAM_READ', allowedRoles: EXAM_ROLES }
     }
   ]
 })
 
-// Auth guard: /login is public; everything else needs a valid session, and a
-// route may additionally require a permission via meta.permission.
+// Auth guard:
+//  - /login is public.
+//  - Every other route needs a session.
+//  - If meta.allowedRoles is set, the active role must be in it. Impersonating
+//    effectively swaps the active role, so admin impersonating staff loses
+//    access to admin-only pages during the impersonation.
+//  - If meta.permission is set, the user must have that authority.
 router.beforeEach((to) => {
   const auth = useAuthStore()
 
@@ -76,6 +95,16 @@ router.beforeEach((to) => {
 
   if (!auth.isAuthenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }
+  }
+
+  // Staff only have one place to be: the Exams page. Make it their landing.
+  if (to.name === 'home' && auth.user?.role === 'SCHOOL_STAFF') {
+    return { name: 'exams' }
+  }
+
+  const allowedRoles = to.meta.allowedRoles as string[] | undefined
+  if (allowedRoles && (!auth.user?.role || !allowedRoles.includes(auth.user.role))) {
+    return { name: 'home' }
   }
 
   const required = to.meta.permission as string | undefined

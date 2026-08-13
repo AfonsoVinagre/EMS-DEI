@@ -13,8 +13,17 @@ public record PersonDto(
 		String name,
 		String email,
 		@JsonProperty(access = Access.WRITE_ONLY) String password,
-		String type) {
+		String type,
+		Long schoolId,
+		String schoolName) {
 	public PersonDto(Person person) {
-		this(person.getId(), person.getName(), person.getEmail(), null, person.getType().toString());
+		this(
+				person.getId(),
+				person.getName(),
+				person.getEmail(),
+				null,
+				person.getType().toString(),
+				person.getSchool() == null ? null : person.getSchool().getId(),
+				person.getSchool() == null ? null : person.getSchool().getName());
 	}
 }
