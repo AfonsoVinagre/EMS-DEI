@@ -25,16 +25,26 @@ public final class RolePermissions {
 				Permission.PERSON_READ,
 				Permission.PERSON_CREATE,
 				Permission.PERSON_UPDATE,
-				Permission.STATISTICS_READ));
+				Permission.STATISTICS_READ,
+				Permission.SCHOOL_READ,
+				Permission.SUBJECT_READ,
+				Permission.EXAM_CREATE,
+				Permission.EXAM_READ));
 
 		// Teachers can read people and statistics.
 		ROLE_PERMISSIONS.put(PersonType.TEACHER, EnumSet.of(
 				Permission.PERSON_READ,
-				Permission.STATISTICS_READ));
+				Permission.STATISTICS_READ,
+				Permission.SCHOOL_READ,
+				Permission.SUBJECT_READ,
+				Permission.EXAM_READ));
 
 		// Students can read the people directory.
 		ROLE_PERMISSIONS.put(PersonType.STUDENT, EnumSet.of(
-				Permission.PERSON_READ));
+				Permission.PERSON_READ,
+				Permission.SCHOOL_READ,
+				Permission.SUBJECT_READ,
+				Permission.EXAM_READ));
 	}
 
 	private RolePermissions() {

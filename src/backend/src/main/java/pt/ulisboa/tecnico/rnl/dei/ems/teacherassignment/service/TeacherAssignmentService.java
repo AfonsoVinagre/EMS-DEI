@@ -68,6 +68,13 @@ public class TeacherAssignmentService {
 	}
 
 	@Transactional
+	public List<TeacherAssignmentDto> listAll() {
+		return teacherAssignmentRepository.findAll().stream()
+				.map(TeacherAssignmentDto::new)
+				.toList();
+	}
+
+	@Transactional
 	public List<TeacherAssignmentDto> listByTeacher(long teacherId) {
 		return teacherAssignmentRepository.findByTeacherId(teacherId).stream()
 				.map(TeacherAssignmentDto::new)

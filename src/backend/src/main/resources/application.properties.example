@@ -18,3 +18,6 @@ spring.jackson.time-zone=Europe/Lisbon
 security.jwt.secret-key=OSMELHORESBOLSEIROSDOTECNICOSAOOSDODEI#BESTBOLSEIROSEVER#OPERASFIXE123
 # Token lifetime in milliseconds (24h)
 security.jwt.expiration-ms=86400000
+
+## File storage
+ems.storage.exams-dir=./data/exams

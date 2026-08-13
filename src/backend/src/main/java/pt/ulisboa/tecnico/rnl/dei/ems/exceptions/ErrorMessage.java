@@ -19,7 +19,23 @@ public enum ErrorMessage {
 	NO_SUCH_SCHOOL("Não existe nenhuma escola com o ID %s", 3002),
 	NO_SUCH_SUBJECT("Não existe nenhuma disciplina com o ID %s", 3003),
 	TEACHER_ASSIGNMENT_ALREADY_EXISTS("Este professor já está associado a esta escola e disciplina.", 3004),
-	NO_SUCH_TEACHER_ASSIGNMENT("Não existe nenhuma associação com o ID %s", 3005);
+	NO_SUCH_TEACHER_ASSIGNMENT("Não existe nenhuma associação com o ID %s", 3005),
+
+	SCHOOL_CODE_NOT_VALID("O código da escola especificado não é válido.", 4001),
+	SCHOOL_NAME_NOT_VALID("O nome da escola especificado não é válido.", 4002),
+	SCHOOL_REGION_NOT_VALID("A região da escola especificada não é válida.", 4003),
+	SCHOOL_CODE_ALREADY_EXISTS("Já existe uma escola com o código %s", 4004),
+	SCHOOL_NAME_ALREADY_EXISTS("Já existe uma escola com o nome %s", 4005),
+
+	SUBJECT_CODE_NOT_VALID("O código da disciplina especificado não é válido.", 5001),
+	SUBJECT_NAME_NOT_VALID("O nome da disciplina especificado não é válido.", 5002),
+	SUBJECT_CODE_ALREADY_EXISTS("Já existe uma disciplina com o código %s", 5003),
+	SUBJECT_NAME_ALREADY_EXISTS("Já existe uma disciplina com o nome %s", 5004),
+
+	NO_SUCH_EXAM("Não existe nenhum exame com o ID %s", 4001),
+	PERSON_NOT_STUDENT("A pessoa com o ID %s não é um aluno.", 4002),
+	INVALID_PDF_FILE("O ficheiro submetido não é um PDF válido.", 4003),
+	FILE_STORAGE_ERROR("Erro ao guardar o ficheiro no servidor.", 4004);
 
 	private final String label;
 	private final int code;

@@ -5,6 +5,10 @@ import { useAuthStore } from '@/stores/auth'
 import DeiError from '@/models/DeiError'
 import type PersonDto from '@/models/PersonDto'
 import type AuthUser from '@/models/AuthUser'
+import type SchoolDto from '@/models/SchoolDto'
+import type SubjectDto from '@/models/SubjectDto'
+import type TeacherAssignmentDto from '@/models/TeacherAssignmentDto'
+import type ExamDto from '@/models/ExamDto'
 
 const httpClient = axios.create()
 httpClient.defaults.timeout = 50000
@@ -24,6 +28,73 @@ export default class RemoteServices {
 
   static async createPerson(person: PersonDto): Promise<PersonDto> {
     return httpClient.post('/people', person)
+  }
+
+  // --- Schools ---
+  static async getSchools(): Promise<SchoolDto[]> {
+    return httpClient.get('/schools')
+  }
+
+  static async createSchool(school: SchoolDto): Promise<SchoolDto> {
+    return httpClient.post('/schools', school)
+  }
+
+  // --- Subjects ---
+  static async getSubjects(): Promise<SubjectDto[]> {
+    return httpClient.get('/subjects')
+  }
+
+  static async createSubject(subject: SubjectDto): Promise<SubjectDto> {
+    return httpClient.post('/subjects', subject)
+  }
+
+  // --- Teacher assignments ---
+  static async getTeacherAssignments(): Promise<TeacherAssignmentDto[]> {
+    return httpClient.get('/teacher-assignments')
+  }
+
+  static async getTeacherAssignmentsByTeacher(teacherId: number): Promise<TeacherAssignmentDto[]> {
+    return httpClient.get(`/teacher-assignments/teacher/${teacherId}`)
+  }
+
+  static async createTeacherAssignment(payload: {
+    teacherId: number
+    schoolId: number
+    subjectId: number
+  }): Promise<TeacherAssignmentDto> {
+    return httpClient.post('/teacher-assignments', payload)
+  }
+
+  static async deleteTeacherAssignment(id: number): Promise<void> {
+    return httpClient.delete(`/teacher-assignments/${id}`)
+  }
+
+  // --- Exams ---
+  static async getExams(): Promise<ExamDto[]> {
+    return httpClient.get('/exams')
+  }
+
+  static async uploadExam(
+    file: File,
+    studentId: number,
+    schoolId: number,
+    subjectId: number
+  ): Promise<ExamDto> {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('studentId', String(studentId))
+    formData.append('schoolId', String(schoolId))
+    formData.append('subjectId', String(subjectId))
+    return httpClient.post('/exams', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  }
+
+  static async getExamsBySchoolAndSubject(
+    schoolId: number,
+    subjectId: number
+  ): Promise<ExamDto[]> {
+    return httpClient.get(`/exams/school/${schoolId}/subject/${subjectId}`)
   }
 
   // --- Authentication ---
