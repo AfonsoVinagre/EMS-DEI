@@ -76,15 +76,6 @@
           </template>
           <template v-slot:[`item.actions`]="{ item }">
             <v-btn
-              v-if="auth.hasPermission('EXAM_LOCK') && item.teacherId"
-              icon="mdi-account-switch"
-              size="small"
-              color="primary"
-              :disabled="!allTeachers.length"
-              title="Reatribuir professor"
-              @click="onReassign(item)"
-            ></v-btn>
-            <v-btn
               v-if="canSubmit(item)"
               color="primary"
               size="small"
@@ -129,35 +120,6 @@
     </v-card>
   </v-dialog>
 
-  <v-dialog v-model="reassignDialog" max-width="500">
-    <v-card>
-      <v-card-title>Reatribuir tarefa</v-card-title>
-      <v-card-text>
-        <v-select
-          v-if="reassigning"
-          v-model="reassignTeacherId"
-          :items="eligibleReassignTeachers"
-          item-title="name"
-          item-value="id"
-          label="Novo professor"
-        ></v-select>
-        <div v-if="!eligibleReassignTeachers.length" class="text-warning">
-          Não há professores elegíveis (todos os disponíveis já corrigiram este fragmento).
-        </div>
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer></v-spacer>
-        <v-btn text="Cancelar" @click="reassignDialog = false"></v-btn>
-        <v-btn
-          color="primary"
-          text="Reatribuir"
-          :disabled="!reassignTeacherId"
-          @click="confirmReassign"
-        ></v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
-
 </template>
 
 <script setup lang="ts">
@@ -166,7 +128,6 @@ import { useRoute } from 'vue-router'
 import type ExamDto from '@/models/ExamDto'
 import type FragmentDto from '@/models/FragmentDto'
 import type CorrectionTaskDto from '@/models/CorrectionTaskDto'
-import type PersonDto from '@/models/PersonDto'
 import RemoteService from '@/services/RemoteService'
 import { useAuthStore } from '@/stores/auth'
 
@@ -184,15 +145,9 @@ const imageUrl = ref<string | null>(null)
 const tasks = ref<CorrectionTaskDto[]>([])
 const loadingTasks = ref(false)
 
-const allTeachers = ref<PersonDto[]>([])
-
 const gradeDialog = ref(false)
 const grading = ref<CorrectionTaskDto | null>(null)
 const gradeInput = ref<number | null>(null)
-
-const reassignDialog = ref(false)
-const reassigning = ref<CorrectionTaskDto | null>(null)
-const reassignTeacherId = ref<number | undefined>(undefined)
 
 const headers = [
   { title: 'ID', key: 'id', value: 'id', sortable: true },
@@ -248,26 +203,15 @@ const latestTask = computed(() => {
 function canSubmit(t: CorrectionTaskDto): boolean {
   if (t.status === 'SUBMITTED') return false
   if (t.teacherId == null) return false
-  // Teachers can only submit on tasks where they are the assigned teacher.
-  if (auth.isAdmin || auth.hasPermission('EXAM_LOCK')) {
-    // Admins can also submit on anyone's behalf (handy during testing).
-    return true
-  }
+  // Only the teacher assigned to this task may submit a grade. Admins do
+  // not have a back door — once exams are distributed, correction belongs
+  // to the assigned teacher.
   return auth.user?.id === t.teacherId
 }
-
-const eligibleReassignTeachers = computed(() => {
-  if (!reassigning.value) return []
-  return allTeachers.value.filter((t) => t.id !== reassigning.value!.teacherId)
-})
 
 onMounted(async () => {
   try {
     exam.value = await RemoteService.getExams().then((all) => all.find((e) => e.id === examId) ?? null)
-  } catch { /* ignore */ }
-  try {
-    const people = await RemoteService.getPeople()
-    allTeachers.value = people.filter((p) => p.type === 'TEACHER')
   } catch { /* ignore */ }
   await refreshFragments()
 })
@@ -335,19 +279,6 @@ async function submitGrade() {
   if (!grading.value || gradeInput.value == null || gradeInput.value < 0) return
   await RemoteService.submitGrade(grading.value.id!, gradeInput.value)
   gradeDialog.value = false
-  if (selected.value?.id != null) await loadTasks(selected.value.id)
-}
-
-function onReassign(t: CorrectionTaskDto) {
-  reassigning.value = t
-  reassignTeacherId.value = undefined
-  reassignDialog.value = true
-}
-
-async function confirmReassign() {
-  if (!reassigning.value || !reassignTeacherId.value) return
-  await RemoteService.reassignTask(reassigning.value.id!, reassignTeacherId.value)
-  reassignDialog.value = false
   if (selected.value?.id != null) await loadTasks(selected.value.id)
 }
 </script>

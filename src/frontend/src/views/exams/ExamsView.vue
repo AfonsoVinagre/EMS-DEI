@@ -2,9 +2,10 @@
   <h2 class="text-left ml-1">Upload e Listagem de Exames</h2>
 
   <!-- Global lock banner (visible to the active role, so staff see when
-       uploads are closed). -->
+       uploads are closed). Hidden once the system is distributed — the
+       lock is permanent at that point and the banner adds no value. -->
   <v-alert
-    v-if="systemState?.examsLocked && (auth.user?.role === 'SCHOOL_STAFF' || isAdminView)"
+    v-if="systemState?.examsLocked && !systemState?.distributed && (auth.user?.role === 'SCHOOL_STAFF' || isAdminView)"
     type="warning"
     variant="tonal"
     class="mb-4"
