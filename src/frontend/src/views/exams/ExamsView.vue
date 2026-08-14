@@ -106,16 +106,14 @@
     </v-col>
     <v-col cols="auto">
       <v-btn
-        v-if="canDistribute"
+        v-if="canDistribute && !systemState?.distributed"
         color="primary"
         prepend-icon="mdi-account-multiple-plus-outline"
         :loading="distributing"
-        :disabled="distributing || uploadedCount === 0 || !systemState?.examsLocked || systemState?.distributed"
+        :disabled="distributing || uploadedCount === 0 || !systemState?.examsLocked"
         :title="!systemState?.examsLocked
           ? 'Bloqueie os exames antes de distribuir'
-          : systemState?.distributed
-            ? 'Os exames já foram distribuídos'
-            : ''"
+          : ''"
         :text="`Distribuir Exames (${uploadedCount})`"
         @click="onDistributeAll"
       ></v-btn>

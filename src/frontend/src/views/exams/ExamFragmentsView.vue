@@ -9,7 +9,7 @@
   <h2 class="text-left ml-1">
     Fragmentos do exame #{{ examId }}
     <span v-if="exam" class="text-medium-emphasis text-h6">
-      ({{ exam.originalFilename }} — {{ exam.status }})
+      ({{ exam.originalFilename }})
     </span>
   </h2>
 
@@ -34,16 +34,10 @@
     no-data-text="Este exame ainda não tem fragmentos."
     @click:row="onRow"
   >
+    <template v-slot:[`item.status`]="{ item }">
+      {{ fragmentStatusLabel(item.status) }}
+    </template>
     <template v-slot:[`item.actions`]="{ item }">
-      <v-btn
-        v-if="canRequestRevision(item)"
-        icon="mdi-reload"
-        size="small"
-        color="primary"
-        title="Pedir revisão"
-        :loading="busyIds.has(item.id ?? -1)"
-        @click.stop="onRequestRevision(item)"
-      ></v-btn>
     </template>
   </v-data-table>
 
@@ -54,7 +48,10 @@
       </v-card-title>
       <v-card-text>
         <div class="text-left mb-2">
-          <strong>Estado:</strong> {{ selected.status }}
+          <strong>Estado:</strong> {{ fragmentStatusLabel(selected.status) }}
+          <span v-if="latestTask" class="text-medium-emphasis">
+            — {{ phaseLabel(latestTask.phase) }}
+          </span>
         </div>
         <v-img
           v-if="imageUrl"
@@ -74,6 +71,9 @@
           no-data-text="Sem tarefas."
           class="text-left"
         >
+          <template v-slot:[`item.phase`]="{ item }">
+            {{ phaseLabel(item.phase) }}
+          </template>
           <template v-slot:[`item.actions`]="{ item }">
             <v-btn
               v-if="auth.hasPermission('EXAM_LOCK') && item.teacherId"
@@ -158,38 +158,10 @@
     </v-card>
   </v-dialog>
 
-  <v-dialog v-model="revisionDialog" max-width="500">
-    <v-card>
-      <v-card-title>Pedir revisão do fragmento {{ revisionFor?.id }}</v-card-title>
-      <v-card-text>
-        <v-select
-          v-if="revisionFor"
-          v-model="revisionTeacherId"
-          :items="eligibleRevisionTeachers"
-          item-title="name"
-          item-value="id"
-          label="Professor revisor"
-        ></v-select>
-        <div v-if="!eligibleRevisionTeachers.length" class="text-warning">
-          Sem professores elegíveis para revisão.
-        </div>
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer></v-spacer>
-        <v-btn text="Cancelar" @click="revisionDialog = false"></v-btn>
-        <v-btn
-          color="primary"
-          text="Criar revisão"
-          :disabled="!revisionTeacherId"
-          @click="confirmRevision"
-        ></v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import type ExamDto from '@/models/ExamDto'
 import type FragmentDto from '@/models/FragmentDto'
@@ -211,7 +183,6 @@ const drawer = ref(false)
 const imageUrl = ref<string | null>(null)
 const tasks = ref<CorrectionTaskDto[]>([])
 const loadingTasks = ref(false)
-const busyIds = reactive(new Set<number>())
 
 const allTeachers = ref<PersonDto[]>([])
 
@@ -222,10 +193,6 @@ const gradeInput = ref<number | null>(null)
 const reassignDialog = ref(false)
 const reassigning = ref<CorrectionTaskDto | null>(null)
 const reassignTeacherId = ref<number | undefined>(undefined)
-
-const revisionDialog = ref(false)
-const revisionFor = ref<FragmentDto | null>(null)
-const revisionTeacherId = ref<number | undefined>(undefined)
 
 const headers = [
   { title: 'ID', key: 'id', value: 'id', sortable: true },
@@ -243,13 +210,40 @@ const taskHeaders = [
   { title: 'Ações', key: 'actions', value: 'actions', sortable: false }
 ]
 
-function canRequestRevision(f: FragmentDto): boolean {
-  return (
-    auth.hasPermission('EXAM_LOCK') &&
-    (f.status === 'CORRECTED' || f.status === 'IN_REVISION' ||
-      f.status === 'IN_CORRECTION' || f.status === 'UNASSIGNED')
-  )
+/**
+ * Translates the @Transient Fragment.status (computed in the backend from
+ * the latest CorrectionTask) to a human-readable Portuguese label. The
+ * status reflects where the CorrectionTask pipeline is, not the exam's
+ * own lifecycle.
+ */
+function fragmentStatusLabel(status: string | undefined): string {
+  switch (status) {
+    case 'UNASSIGNED': return 'Pendente'
+    case 'IN_CORRECTION': return 'Em correção'
+    case 'IN_REVISION': return 'Em revisão'
+    case 'CORRECTED': return 'Submetido'
+    case 'REVISION_SUBMITTED': return 'Revisão submetida'
+    default: return status ?? ''
+  }
 }
+
+function phaseLabel(phase: CorrectionTaskDto['phase'] | undefined): string {
+  switch (phase) {
+    case 'PRIMARY': return 'Em correção'
+    case 'REVISION': return 'Em revisão'
+    default: return ''
+  }
+}
+
+/** The most recent CorrectionTask for the selected fragment. */
+const latestTask = computed(() => {
+  if (!tasks.value.length) return null
+  return tasks.value.slice().sort((a, b) => {
+    const ta = a.assignedAt ?? ''
+    const tb = b.assignedAt ?? ''
+    return tb.localeCompare(ta)
+  })[0] ?? null
+})
 
 function canSubmit(t: CorrectionTaskDto): boolean {
   if (t.status === 'SUBMITTED') return false
@@ -265,12 +259,6 @@ function canSubmit(t: CorrectionTaskDto): boolean {
 const eligibleReassignTeachers = computed(() => {
   if (!reassigning.value) return []
   return allTeachers.value.filter((t) => t.id !== reassigning.value!.teacherId)
-})
-
-const eligibleRevisionTeachers = computed(() => {
-  if (!revisionFor.value) return []
-  const usedIds = new Set(tasks.value.map((t) => t.teacherId).filter(Boolean))
-  return allTeachers.value.filter((t) => !usedIds.has(t.id))
 })
 
 onMounted(async () => {
@@ -361,19 +349,5 @@ async function confirmReassign() {
   await RemoteService.reassignTask(reassigning.value.id!, reassignTeacherId.value)
   reassignDialog.value = false
   if (selected.value?.id != null) await loadTasks(selected.value.id)
-}
-
-function onRequestRevision(f: FragmentDto) {
-  revisionFor.value = f
-  revisionTeacherId.value = undefined
-  revisionDialog.value = true
-}
-
-async function confirmRevision() {
-  if (!revisionFor.value || !revisionTeacherId.value) return
-  await RemoteService.requestRevision(revisionFor.value.id!, revisionTeacherId.value)
-  revisionDialog.value = false
-  if (selected.value?.id != null) await loadTasks(selected.value.id)
-  await refreshFragments()
 }
 </script>
