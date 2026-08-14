@@ -50,7 +50,7 @@ public enum ErrorMessage {
 	GRADE_NOT_VALID("A nota atribuída tem de ser maior ou igual a zero.", 5021),
 	SUBJECT_NOT_ASSIGNED("A correção não está atribuída a este fragmento.", 5022),
 	EXAM_UPLOADS_GLOBALLY_LOCKED("Os uploads de exames estão bloqueados neste momento.", 5023),
-	EXAMS_NOT_ALL_SEGMENTED("Não é possível bloquear enquanto houver exames não segmentados.", 5024),
+	EXAMS_NOT_LOCKED("Os exames têm de estar bloqueados antes de serem distribuídos.", 5024),
 	STAFF_UPLOAD_TO_OTHER_SCHOOL("Só pode submeter exames de alunos da sua escola.", 5025),
 	PERSON_SCHOOL_REQUIRED("Esta conta tem de ter uma escola atribuída.", 5026),
 	PERSON_SCHOOL_NOT_APPLICABLE("Um administrador não tem escola atribuída.", 5027);

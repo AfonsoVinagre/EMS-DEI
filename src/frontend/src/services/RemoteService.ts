@@ -13,11 +13,6 @@ import type FragmentDto from '@/models/FragmentDto'
 import type CorrectionTaskDto from '@/models/CorrectionTaskDto'
 import type SystemStateDto from '@/models/SystemStateDto'
 
-export interface SegmentAllResult {
-  examIds: number[]
-  failures: { examId: number; errorCode: number }[]
-}
-
 const httpClient = axios.create()
 httpClient.defaults.timeout = 50000
 httpClient.defaults.baseURL = import.meta.env.VITE_ROOT_API
@@ -107,16 +102,8 @@ export default class RemoteServices {
     return httpClient.get(`/exams/school/${schoolId}/subject/${subjectId}`)
   }
 
-  static async segmentExam(id: number): Promise<ExamDto> {
-    return httpClient.post(`/exams/${id}/segment`)
-  }
-
-  static async segmentAllExams(): Promise<SegmentAllResult> {
-    return httpClient.post('/exams/segment-all')
-  }
-
-  static async distributeExam(id: number): Promise<ExamDto> {
-    return httpClient.post(`/exams/${id}/distribute`)
+  static async distributeAllExams(): Promise<number[]> {
+    return httpClient.post('/exams/distribute-all')
   }
 
   // --- Fragments ---
@@ -161,10 +148,6 @@ export default class RemoteServices {
 
   static async reassignTask(taskId: number, teacherId: number): Promise<CorrectionTaskDto> {
     return httpClient.patch(`/correction-tasks/${taskId}`, { teacherId })
-  }
-
-  static async requestRevision(fragmentId: number, teacherId: number): Promise<CorrectionTaskDto> {
-    return httpClient.post(`/fragments/${fragmentId}/revision?teacherId=${teacherId}`)
   }
 
   // --- System state ---

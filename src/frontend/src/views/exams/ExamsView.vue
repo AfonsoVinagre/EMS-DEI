@@ -55,7 +55,8 @@
       <v-btn
         color="primary"
         prepend-icon="mdi-upload"
-        text="Submeter"
+        :text="submitting ? 'A submeter…' : 'Submeter'"
+        :loading="submitting"
         :disabled="!canSubmitForm || uploadsDisabled"
         @click="uploadExam"
       ></v-btn>
@@ -87,31 +88,30 @@
     </v-col>
   </v-row>
 
-  <!-- Global action bar: batch operations. -->
+  <!-- Global action bar: lock/unlock uploads (admin-only) and distribute
+       uploaded exams (admin-only, only available once the system is locked). -->
   <v-row class="mb-2">
-    <v-col cols="auto">
-      <v-btn
-        v-if="canSegmentAll"
-        color="primary"
-        prepend-icon="mdi-content-cut"
-        :loading="busy"
-        :disabled="busy"
-        text="Segmentar Todos (por segmentar)"
-        @click="onSegmentAll"
-      ></v-btn>
-    </v-col>
     <v-col cols="auto">
       <v-btn
         v-if="canControlUploads"
         :color="systemState?.examsLocked ? 'warning' : 'primary'"
         :prepend-icon="systemState?.examsLocked ? 'mdi-lock-open-variant' : 'mdi-lock'"
         :loading="busy"
-        :disabled="busy || (!systemState?.examsLocked && !canLockNow)"
-        :title="!systemState?.examsLocked && !canLockNow
-          ? 'Não é possível bloquear enquanto houver exames por segmentar.'
-          : ''"
+        :disabled="busy"
         :text="systemState?.examsLocked ? 'Desbloquear Exames' : 'Bloquear Exames'"
         @click="onToggleLock"
+      ></v-btn>
+    </v-col>
+    <v-col cols="auto">
+      <v-btn
+        v-if="canDistribute"
+        color="primary"
+        prepend-icon="mdi-account-multiple-plus-outline"
+        :loading="distributing"
+        :disabled="distributing || uploadedCount === 0 || !systemState?.examsLocked"
+        :title="!systemState?.examsLocked ? 'Bloqueie os exames antes de distribuir' : ''"
+        :text="`Distribuir Exames (${uploadedCount})`"
+        @click="onDistributeAll"
       ></v-btn>
     </v-col>
   </v-row>
@@ -166,6 +166,8 @@ const loadingSchools = ref(true)
 const loadingSubjects = ref(true)
 const loadingExams = ref(false)
 const busy = ref(false)
+const distributing = ref(false)
+const submitting = ref(false)
 
 const headers = [
   { title: 'ID', key: 'id', value: 'id', sortable: true },
@@ -194,12 +196,16 @@ const canUpload = computed(
 const canSubmitForm = computed(
   () => !!pickFile() && !!newStudentId.value && !!newSubjectId.value
 )
-const canSegmentAll = computed(() => auth.hasPermission('EXAM_SEGMENT'))
+const canDistribute = computed(
+  () => auth.user?.role === 'ADMINISTRATOR' && !auth.isImpersonating && auth.hasPermission('EXAM_DISTRIBUTE')
+)
 const canControlUploads = computed(
   () => auth.user?.role === 'ADMINISTRATOR' && !auth.isImpersonating && auth.hasPermission('EXAM_LOCK')
 )
-const allSegmented = computed(() => exams.value.every((e) => e.status !== 'UPLOADED'))
-const canLockNow = computed(() => auth.hasPermission('EXAM_LOCK') && allSegmented.value)
+
+const uploadedCount = computed(
+  () => exams.value.filter((e) => e.status === 'UPLOADED').length
+)
 
 const uploadsDisabled = computed(() => systemState.value?.examsLocked === true)
 
@@ -213,7 +219,7 @@ const filteredExams = computed(() =>
 
 function hasFragments(e: ExamDto): boolean {
   return (
-    e.status === 'SEGMENTED' ||
+    e.status === 'UPLOADED' ||
     e.status === 'DISTRIBUTED' ||
     e.status === 'CORRECTED' ||
     e.status === 'RELEASED'
@@ -270,6 +276,7 @@ refreshSystemState()
 async function uploadExam() {
   const file = pickFile()
   if (!file || !newStudentId.value || !newSubjectId.value) return
+  submitting.value = true
   try {
     await RemoteService.uploadExam(file, newStudentId.value, newSubjectId.value)
     pdfFile.value = undefined
@@ -277,23 +284,19 @@ async function uploadExam() {
     await refreshSystemState()
   } catch {
     await refreshSystemState()
+  } finally {
+    submitting.value = false
   }
 }
 
-async function onSegmentAll() {
-  busy.value = true
+async function onDistributeAll() {
+  if (uploadedCount.value === 0) return
+  distributing.value = true
   try {
-    const result = await RemoteService.segmentAllExams()
-    if (result.failures.length > 0) {
-      console.warn(
-        `Segmentados ${result.examIds.length}, falharam ${result.failures.length}:`,
-        result.failures
-      )
-    }
+    await RemoteService.distributeAllExams()
     await refreshExams()
-    await refreshSystemState()
   } finally {
-    busy.value = false
+    distributing.value = false
   }
 }
 

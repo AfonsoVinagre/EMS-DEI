@@ -175,6 +175,11 @@ public class ExamService {
 				school,
 				subject,
 				uploadedBy));
+
+		// Segment immediately so the user does not need to remember a
+		// separate step (and so the "lock uploads" guard does not depend
+		// on a batch operation they could forget to run).
+		segmentInternal(exam);
 		return new ExamDto(exam);
 	}
 
@@ -228,30 +233,12 @@ public class ExamService {
 	}
 
 	/**
-	 * Splits an exam's PDF into one Fragment per page, rendered to PNG at 150
-	 * DPI. Atomic: if any page fails, the exam stays UPLOADED and partial
-	 * files are removed.
+	 * Performs the actual segmentation work for a freshly UPLOADED exam.
+	 * Throws a {@link DEIException} on PDF errors; partial PNG fragments
+	 * are cleaned up before propagating.
 	 *
 	 * No auto-attribution: this is purely a physical carve-out. Distribution
 	 * happens later via {@link #distribute(long)}.
-	 */
-	@Transactional
-	public ExamDto segment(long examId) {
-		Exam exam = examRepository.findById(examId)
-				.orElseThrow(() -> new DEIException(ErrorMessage.NO_SUCH_EXAM, Long.toString(examId)));
-
-		if (exam.getStatus() != Exam.ExamStatus.UPLOADED) {
-			throw new DEIException(ErrorMessage.EXAM_NOT_SEGMENTABLE, exam.getStatus().toString());
-		}
-
-		segmentInternal(exam);
-		return new ExamDto(exam);
-	}
-
-	/**
-	 * Performs the actual segmentation work for an exam that is already
-	 * known to be UPLOADED. Caller is responsible for the status check.
-	 * Throws a {@link DEIException} on PDF errors.
 	 */
 	private void segmentInternal(Exam exam) {
 		ensureFragmentsDirExists();
@@ -287,58 +274,22 @@ public class ExamService {
 			throw new DEIException(ErrorMessage.PDF_RENDER_ERROR);
 		}
 
-		exam.setStatus(Exam.ExamStatus.SEGMENTED);
+		exam.setStatus(Exam.ExamStatus.UPLOADED);
 		examRepository.save(exam);
 	}
 
 	/**
-	 * Result of a batch segmentation run. {@link #examIds} contains the IDs
-	 * of exams that were successfully moved to SEGMENTED; {@link #failures}
-	 * groups the ones that failed along with the ErrorMessage code that
-	 * surfaced.
+	 * Distribute every fragment of an exam across the available teachers for
+	 * its subject. Each fragment gets exactly one PRIMARY CorrectionTask
+	 * assigned to a random teacher from that subject's pool. The pool is
+	 * pre-loaded once per subject so the random selection distributes the
+	 * exam's load evenly across the available teachers.
+	 *
+	 * Fails atomically (the whole transaction rolls back) if any subject
+	 * present in the exam has no teacher assigned.
 	 */
-	public record SegmentAllResult(List<Long> examIds, List<SegmentFailure> failures) {
-	}
-
-	public record SegmentFailure(long examId, int errorCode) {
-	}
-
-	/**
-	 * Segment every UPLOADED exam in the database. Each exam is processed in
-	 * its own transaction (REQUIRES_NEW) so that a single bad PDF does not
-	 * block the rest of the batch.
-	 */
-	@Transactional
-	public SegmentAllResult segmentAll() {
-		List<Exam> uploaded = examRepository.findByStatus(Exam.ExamStatus.UPLOADED);
-		List<Long> segmented = new ArrayList<>();
-		List<SegmentFailure> failures = new ArrayList<>();
-		for (Exam exam : uploaded) {
-			try {
-				segmentInternal(exam);
-				segmented.add(exam.getId());
-			} catch (DEIException ex) {
-				failures.add(new SegmentFailure(exam.getId(), ex.getErrorMessage().getCode()));
-			}
-		}
-		return new SegmentAllResult(segmented, failures);
-	}
-
-	/**
-	 * Distribute a segmented exam: for every fragment, pick a random teacher
-	 * covering the subject (school ignored per product decision) and create a
-	 * PRIMARY CorrectionTask. Fails atomically if any subject has no teacher.
-	 */
-	@Transactional
-	public ExamDto distribute(long examId) {
-		Exam exam = examRepository.findById(examId)
-				.orElseThrow(() -> new DEIException(ErrorMessage.NO_SUCH_EXAM, Long.toString(examId)));
-
-		if (exam.getStatus() != Exam.ExamStatus.SEGMENTED) {
-			throw new DEIException(ErrorMessage.EXAM_NOT_DISTRIBUTABLE, exam.getStatus().toString());
-		}
-
-		List<Fragment> fragments = fragmentRepository.findByExamId(examId);
+	private void distributeInternal(Exam exam) {
+		List<Fragment> fragments = fragmentRepository.findByExamId(exam.getId());
 		if (fragments.isEmpty()) {
 			throw new DEIException(ErrorMessage.EXAM_NOT_DISTRIBUTABLE, "no fragments");
 		}
@@ -363,6 +314,29 @@ public class ExamService {
 
 		exam.setStatus(Exam.ExamStatus.DISTRIBUTED);
 		examRepository.save(exam);
-		return new ExamDto(exam);
+	}
+
+	/**
+	 * Distribute every UPLOADED exam in the system. Used by the admin-only
+	 * "Distribute exams" action. Returns the list of distributed exam ids
+	 * for the UI to display a summary.
+	 *
+	 * Distribution is only allowed once the system is locked — uploads are
+	 * frozen, the admin reviews the pool and triggers the batch. A single
+	 * exam failing (e.g. a subject with no teacher) rolls the whole batch
+	 * back: the admin is told to fix the assignment and retry.
+	 */
+	@Transactional
+	public List<Long> distributeAll() {
+		if (!systemStateService.isLocked()) {
+			throw new DEIException(ErrorMessage.EXAMS_NOT_LOCKED);
+		}
+		List<Exam> uploaded = examRepository.findAll().stream()
+				.filter(e -> e.getStatus() == Exam.ExamStatus.UPLOADED)
+				.toList();
+		for (Exam exam : uploaded) {
+			distributeInternal(exam);
+		}
+		return uploaded.stream().map(Exam::getId).toList();
 	}
 }

@@ -16,7 +16,6 @@ import pt.ulisboa.tecnico.rnl.dei.ems.exceptions.DEIException;
 import pt.ulisboa.tecnico.rnl.dei.ems.exceptions.ErrorMessage;
 import pt.ulisboa.tecnico.rnl.dei.ems.exam.dto.ExamDto;
 import pt.ulisboa.tecnico.rnl.dei.ems.exam.service.ExamService;
-import pt.ulisboa.tecnico.rnl.dei.ems.exam.service.ExamService.SegmentAllResult;
 import pt.ulisboa.tecnico.rnl.dei.ems.person.domain.Person;
 import pt.ulisboa.tecnico.rnl.dei.ems.security.SecurityUtils;
 
@@ -68,21 +67,14 @@ public class ExamController {
 		return examService.listBySchoolAndSubject(schoolId, subjectId);
 	}
 
-	@PostMapping("/exams/{id}/segment")
-	@PreAuthorize("hasAuthority('EXAM_SEGMENT')")
-	public ExamDto segment(@PathVariable long id) {
-		return examService.segment(id);
-	}
-
-	@PostMapping("/exams/segment-all")
-	@PreAuthorize("hasAuthority('EXAM_SEGMENT')")
-	public SegmentAllResult segmentAll() {
-		return examService.segmentAll();
-	}
-
-	@PostMapping("/exams/{id}/distribute")
-	@PreAuthorize("hasAuthority('EXAM_LOCK')")
-	public ExamDto distribute(@PathVariable long id) {
-		return examService.distribute(id);
+	/**
+	 * Admin-only batch distribution. Picks one teacher per fragment from the
+	 * subject's teacher pool, balanced across fragments. Atomic: if any
+	 * subject in the batch has no teacher, the whole transaction rolls back.
+	 */
+	@PostMapping("/exams/distribute-all")
+	@PreAuthorize("hasAuthority('EXAM_DISTRIBUTE')")
+	public List<Long> distributeAll() {
+		return examService.distributeAll();
 	}
 }

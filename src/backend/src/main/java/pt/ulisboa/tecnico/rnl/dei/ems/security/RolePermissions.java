@@ -20,8 +20,8 @@ public final class RolePermissions {
 		// Administrators can do everything, including impersonation.
 		ROLE_PERMISSIONS.put(PersonType.ADMINISTRATOR, EnumSet.allOf(Permission.class));
 
-		// School staff manage day-to-day exam operations: upload + segmentation +
-// distribution. They cannot lock/unlock uploads — that's an admin decision.
+		// School staff upload exams (which also segments them server-side).
+		// They cannot distribute (admin-only) nor lock/unlock uploads.
 		ROLE_PERMISSIONS.put(PersonType.SCHOOL_STAFF, EnumSet.of(
 				Permission.PERSON_READ,
 				Permission.PERSON_CREATE,
@@ -30,7 +30,6 @@ public final class RolePermissions {
 				Permission.SCHOOL_READ,
 				Permission.SUBJECT_READ,
 				Permission.EXAM_CREATE,
-				Permission.EXAM_SEGMENT,
 				Permission.EXAM_READ));
 
 		// Teachers can read people and statistics.
