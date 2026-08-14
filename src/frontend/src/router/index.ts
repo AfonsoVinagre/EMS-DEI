@@ -73,7 +73,7 @@ const router = createRouter({
       path: '/exams/:id/fragments',
       name: 'exam-fragments',
       component: ExamFragmentsView,
-      meta: { permission: 'EXAM_READ', allowedRoles: [...EXAM_ROLES, ...TEACHER_ROLES] }
+      meta: { permission: 'EXAM_READ', allowedRoles: EXAM_ROLES }
     },
     {
       path: '/corrections',
