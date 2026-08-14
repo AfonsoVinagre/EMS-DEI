@@ -28,10 +28,9 @@ const navbarItems: NavItem[] = [
   { name: 'Associações', path: '/teacher-assignments', icon: 'mdi-account-tie', roles: ['ADMINISTRATOR'] },
   { name: 'Exames', path: '/exams', icon: 'mdi-file-pdf-box', roles: [
     'ADMINISTRATOR',
-    'SCHOOL_STAFF',
-    'TEACHER',
-    'STUDENT'
+    'SCHOOL_STAFF'
   ] },
+  { name: 'Correcções', path: '/corrections', icon: 'mdi-clipboard-check-outline', roles: ['TEACHER'] },
   { name: 'Estatísticas', path: '/statistics', icon: 'mdi-chart-bar', roles: ['ADMINISTRATOR'] }
 ]
 

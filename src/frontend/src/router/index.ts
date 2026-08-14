@@ -8,13 +8,15 @@ import SubjectsView from '@/views/subjects/SubjectsView.vue'
 import TeacherAssignmentsView from '@/views/teacherassignments/TeacherAssignmentsView.vue'
 import ExamsView from '@/views/exams/ExamsView.vue'
 import ExamFragmentsView from '@/views/exams/ExamFragmentsView.vue'
+import CorrectionsView from '@/views/corrections/CorrectionsView.vue'
 import { useAuthStore } from '@/stores/auth'
 
 // Roles that may enter each page (in addition to the permission check).
 // During impersonation, auth.user.role reflects the *impersonated* role, so
 // admin impersonating staff effectively becomes a staff-equivalent for
 // navigation.
-const EXAM_ROLES = ['ADMINISTRATOR', 'SCHOOL_STAFF', 'TEACHER', 'STUDENT']
+const EXAM_ROLES = ['ADMINISTRATOR', 'SCHOOL_STAFF']
+const TEACHER_ROLES = ['TEACHER']
 const ADMIN_ONLY = ['ADMINISTRATOR']
 
 const router = createRouter({
@@ -71,7 +73,13 @@ const router = createRouter({
       path: '/exams/:id/fragments',
       name: 'exam-fragments',
       component: ExamFragmentsView,
-      meta: { permission: 'EXAM_READ', allowedRoles: EXAM_ROLES }
+      meta: { permission: 'EXAM_READ', allowedRoles: [...EXAM_ROLES, ...TEACHER_ROLES] }
+    },
+    {
+      path: '/corrections',
+      name: 'corrections',
+      component: CorrectionsView,
+      meta: { permission: 'EXAM_READ', allowedRoles: TEACHER_ROLES }
     }
   ]
 })
@@ -97,9 +105,10 @@ router.beforeEach((to) => {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
 
-  // Staff only have one place to be: the Exams page. Make it their landing.
-  if (to.name === 'home' && auth.user?.role === 'SCHOOL_STAFF') {
-    return { name: 'exams' }
+  // School staff and teachers each have their own landing page.
+  if (to.name === 'home') {
+    if (auth.user?.role === 'SCHOOL_STAFF') return { name: 'exams' }
+    if (auth.user?.role === 'TEACHER') return { name: 'corrections' }
   }
 
   const allowedRoles = to.meta.allowedRoles as string[] | undefined
