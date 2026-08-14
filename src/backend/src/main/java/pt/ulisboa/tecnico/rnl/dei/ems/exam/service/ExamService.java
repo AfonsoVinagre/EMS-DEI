@@ -337,6 +337,10 @@ public class ExamService {
 		for (Exam exam : uploaded) {
 			distributeInternal(exam);
 		}
+		if (!uploaded.isEmpty()) {
+			// Permanent marker: from now on, the lock cannot be reversed.
+			systemStateService.markDistributed();
+		}
 		return uploaded.stream().map(Exam::getId).toList();
 	}
 }

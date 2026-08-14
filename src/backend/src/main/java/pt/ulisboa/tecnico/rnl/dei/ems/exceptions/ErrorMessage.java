@@ -52,6 +52,7 @@ public enum ErrorMessage {
 	EXAM_UPLOADS_GLOBALLY_LOCKED("Os uploads de exames estão bloqueados neste momento.", 5023),
 	EXAMS_NOT_LOCKED("Os exames têm de estar bloqueados antes de serem distribuídos.", 5024),
 	STAFF_UPLOAD_TO_OTHER_SCHOOL("Só pode submeter exames de alunos da sua escola.", 5025),
+	EXAMS_ALREADY_DISTRIBUTED("Os exames já foram distribuídos — o lock não pode ser revertido.", 5030),
 	PERSON_SCHOOL_REQUIRED("Esta conta tem de ter uma escola atribuída.", 5026),
 	PERSON_SCHOOL_NOT_APPLICABLE("Um administrador não tem escola atribuída.", 5027);
 

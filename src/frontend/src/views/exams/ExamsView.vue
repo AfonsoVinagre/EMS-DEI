@@ -89,11 +89,13 @@
   </v-row>
 
   <!-- Global action bar: lock/unlock uploads (admin-only) and distribute
-       uploaded exams (admin-only, only available once the system is locked). -->
+       uploaded exams (admin-only, only available once the system is locked).
+       Once exams have been distributed, the unlock button disappears — the
+       lock is permanent at that point. -->
   <v-row class="mb-2">
     <v-col cols="auto">
       <v-btn
-        v-if="canControlUploads"
+        v-if="canControlUploads && !systemState?.distributed"
         :color="systemState?.examsLocked ? 'warning' : 'primary'"
         :prepend-icon="systemState?.examsLocked ? 'mdi-lock-open-variant' : 'mdi-lock'"
         :loading="busy"
@@ -108,8 +110,12 @@
         color="primary"
         prepend-icon="mdi-account-multiple-plus-outline"
         :loading="distributing"
-        :disabled="distributing || uploadedCount === 0 || !systemState?.examsLocked"
-        :title="!systemState?.examsLocked ? 'Bloqueie os exames antes de distribuir' : ''"
+        :disabled="distributing || uploadedCount === 0 || !systemState?.examsLocked || systemState?.distributed"
+        :title="!systemState?.examsLocked
+          ? 'Bloqueie os exames antes de distribuir'
+          : systemState?.distributed
+            ? 'Os exames já foram distribuídos'
+            : ''"
         :text="`Distribuir Exames (${uploadedCount})`"
         @click="onDistributeAll"
       ></v-btn>

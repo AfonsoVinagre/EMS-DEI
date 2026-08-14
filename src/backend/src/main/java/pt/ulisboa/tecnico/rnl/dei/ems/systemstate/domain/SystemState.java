@@ -8,8 +8,12 @@ import lombok.Data;
 
 /**
  * Singleton row (id always 1) that stores application-wide state which is not
- * tied to any specific entity. Currently tracks whether new exam uploads by
- * SCHOOL_STAFF are globally locked.
+ * tied to any specific entity. Tracks two global toggles:
+ *
+ *  - examsLocked:  new exam uploads by SCHOOL_STAFF are blocked.
+ *  - distributed:  an admin has distributed uploaded exams to teachers at
+ *                  least once. Once true, the lock is permanent: uploads
+ *                  stay blocked and the system cannot be unlocked again.
  *
  * The single-row pattern is intentional — this is configuration-style state,
  * not a multi-instance collection. Seeded on application start by
@@ -26,6 +30,9 @@ public class SystemState {
 
 	@Column(name = "exams_locked", nullable = false)
 	private boolean examsLocked = false;
+
+	@Column(name = "distributed", nullable = false)
+	private boolean distributed = false;
 
 	protected SystemState() {
 	}

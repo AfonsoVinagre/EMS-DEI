@@ -45,6 +45,11 @@ public class SystemStateService {
 	@Transactional
 	public SystemStateDto unlockUploads() {
 		SystemState state = ensureRow();
+		// Once exams have been distributed, the lock is permanent. The admin
+		// is expected to commit to the distribution cycle at that point.
+		if (state.isDistributed()) {
+			throw new DEIException(ErrorMessage.EXAMS_ALREADY_DISTRIBUTED);
+		}
 		state.setExamsLocked(false);
 		systemStateRepository.save(state);
 		return new SystemStateDto(state);
@@ -62,5 +67,15 @@ public class SystemStateService {
 	 */
 	public boolean isLocked() {
 		return ensureRow().isExamsLocked();
+	}
+
+	/**
+	 * Marks the singleton as having been distributed. Called from the exam
+	 * distribution batch — once true, unlock is permanently refused.
+	 */
+	public void markDistributed() {
+		SystemState state = ensureRow();
+		state.setDistributed(true);
+		systemStateRepository.save(state);
 	}
 }
