@@ -45,6 +45,10 @@
       <span v-if="(item as any)._isPdf">{{ examStatusLabel(exam?.status) }}</span>
       <span v-else>{{ fragmentStatusLabel(item.status) }}</span>
     </template>
+    <template v-slot:[`item.grade`]="{ item }">
+      <span v-if="(item as any)._isPdf">{{ exam?.grade == null ? '--' : exam.grade }}</span>
+      <span v-else>{{ item.grade == null ? '--' : item.grade }}</span>
+    </template>
     <template v-slot:[`item.actions`]="{ item }">
       <v-btn
         v-if="(item as any)._isPdf"
@@ -203,6 +207,7 @@ const headers = [
   { title: 'Página', key: 'pageNumber', value: 'pageNumber', sortable: true },
   { title: 'Disciplina', key: 'subjectName', value: 'subjectName', sortable: true },
   { title: 'Estado', key: 'status', value: 'status', sortable: true },
+  { title: 'Nota', key: 'grade', value: 'grade', sortable: true },
   { title: 'Ações', key: 'actions', value: 'actions', sortable: false }
 ]
 
@@ -385,5 +390,12 @@ async function submitGrade() {
   await RemoteService.submitGrade(grading.value.id!, gradeInput.value)
   gradeDialog.value = false
   if (selected.value?.id != null) await loadTasks(selected.value.id)
+  // The fragment's grade (and possibly the exam's total, when this was the
+  // last missing correction) changed server-side — refresh both so the
+  // table's Nota column and the "PDF completo" row stay in sync.
+  await refreshFragments()
+  try {
+    exam.value = await RemoteService.getExams().then((all) => all.find((e) => e.id === examId) ?? null)
+  } catch { /* ignore */ }
 }
 </script>

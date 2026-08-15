@@ -11,7 +11,7 @@
     :loading="loading"
     item-key="id"
     class="text-left"
-    no-data-text="Não tem fragmentos atribuídos para corrigir."
+    no-data-text="Não tem perguntas atribuídas para corrigir."
     @click:row="onRow"
   >
     <template v-slot:[`item.status`]="{ item }">

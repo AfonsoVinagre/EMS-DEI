@@ -186,7 +186,7 @@ public class ExamService {
 	@Transactional
 	public ExamDto getExam(long id) {
 		return examRepository.findById(id)
-				.map(ExamDto::new)
+				.map(exam -> new ExamDto(exam, totalGrade(exam)))
 				.orElseThrow(() -> new DEIException(ErrorMessage.NO_SUCH_EXAM, Long.toString(id)));
 	}
 
@@ -208,7 +208,7 @@ public class ExamService {
 	@Transactional
 	public List<ExamDto> listAll() {
 		return examRepository.findAll().stream()
-				.map(ExamDto::new)
+				.map(exam -> new ExamDto(exam, totalGrade(exam)))
 				.toList();
 	}
 
@@ -227,7 +227,7 @@ public class ExamService {
 				throw new DEIException(ErrorMessage.PERSON_SCHOOL_REQUIRED);
 			}
 			return examRepository.findBySchoolId(current.getSchool().getId()).stream()
-					.map(ExamDto::new)
+					.map(exam -> new ExamDto(exam, totalGrade(exam)))
 					.toList();
 		}
 		return listAll();
@@ -236,14 +236,14 @@ public class ExamService {
 	@Transactional
 	public List<ExamDto> listByStudent(long studentId) {
 		return examRepository.findByStudentId(studentId).stream()
-				.map(ExamDto::new)
+				.map(exam -> new ExamDto(exam, totalGrade(exam)))
 				.toList();
 	}
 
 	@Transactional
 	public List<ExamDto> listBySchoolAndSubject(long schoolId, long subjectId) {
 		return examRepository.findBySchoolIdAndSubjectId(schoolId, subjectId).stream()
-				.map(ExamDto::new)
+				.map(exam -> new ExamDto(exam, totalGrade(exam)))
 				.toList();
 	}
 
@@ -357,5 +357,24 @@ public class ExamService {
 			systemStateService.markDistributed();
 		}
 		return uploaded.stream().map(Exam::getId).toList();
+	}
+
+	/**
+	 * Sum of the grades of every corrected (SUBMITTED) fragment of an exam.
+	 * Returns {@code null} unless the exam is fully corrected — i.e. its
+	 * status is {@link Exam.ExamStatus#CORRECTED} or {@link Exam.ExamStatus#RELEASED}:
+	 * before that the total is not meaningful and the UI renders "--".
+	 */
+	private Double totalGrade(Exam exam) {
+		if (exam.getStatus() != Exam.ExamStatus.CORRECTED
+				&& exam.getStatus() != Exam.ExamStatus.RELEASED) {
+			return null;
+		}
+		return correctionTaskRepository.findByFragmentExamId(exam.getId()).stream()
+				.filter(t -> t.getStatus() == CorrectionTask.Status.SUBMITTED)
+				.map(CorrectionTask::getGrade)
+				.filter(java.util.Objects::nonNull)
+				.mapToDouble(Double::doubleValue)
+				.sum();
 	}
 }

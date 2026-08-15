@@ -45,8 +45,7 @@ public class FragmentService {
 	@Value("${ems.storage.fragments-dir:./data/fragments}")
 	private String fragmentsDir;
 
-	private String computeStatus(Fragment fragment) {
-		List<CorrectionTask> tasks = correctionTaskRepository.findByFragmentId(fragment.getId());
+	private String computeStatus(List<CorrectionTask> tasks) {
 		if (tasks.isEmpty()) {
 			return "UNASSIGNED";
 		}
@@ -62,8 +61,25 @@ public class FragmentService {
 		return latest.getPhase() == CorrectionTask.Phase.REVISION ? "IN_REVISION" : "IN_CORRECTION";
 	}
 
-	private void populateStatus(Fragment fragment) {
-		fragment.setStatus(computeStatus(fragment));
+	/**
+	 * The grade of the fragment's corrected PRIMARY task — i.e. the grade the
+	 * assigned teacher submitted. Null while the fragment is not yet
+	 * corrected (no SUBMITTED PRIMARY task), so the UI renders "--".
+	 */
+	private Double computeGrade(List<CorrectionTask> tasks) {
+		return tasks.stream()
+				.filter(t -> t.getPhase() == CorrectionTask.Phase.PRIMARY
+						&& t.getStatus() == CorrectionTask.Status.SUBMITTED)
+				.map(CorrectionTask::getGrade)
+				.filter(java.util.Objects::nonNull)
+				.findFirst()
+				.orElse(null);
+	}
+
+	private void populateStatusAndGrade(Fragment fragment) {
+		List<CorrectionTask> tasks = correctionTaskRepository.findByFragmentId(fragment.getId());
+		fragment.setStatus(computeStatus(tasks));
+		fragment.setGrade(computeGrade(tasks));
 	}
 
 	private boolean currentMaySee(Fragment fragment) {
@@ -99,8 +115,8 @@ public class FragmentService {
 		return all.stream()
 				.filter(this::currentMaySee)
 				.map(f -> {
-					populateStatus(f);
-					return new FragmentDto(f, f.getStatus());
+					populateStatusAndGrade(f);
+					return new FragmentDto(f, f.getStatus(), f.getGrade());
 				})
 				.toList();
 	}
@@ -112,8 +128,8 @@ public class FragmentService {
 		if (!currentMaySee(fragment)) {
 			throw new DEIException(ErrorMessage.NO_SUCH_FRAGMENT, Long.toString(id));
 		}
-		populateStatus(fragment);
-		return new FragmentDto(fragment, fragment.getStatus());
+		populateStatusAndGrade(fragment);
+		return new FragmentDto(fragment, fragment.getStatus(), fragment.getGrade());
 	}
 
 	@Transactional
@@ -122,8 +138,8 @@ public class FragmentService {
 		return fragments.stream()
 				.filter(this::currentMaySee)
 				.map(f -> {
-					populateStatus(f);
-					return new FragmentDto(f, f.getStatus());
+					populateStatusAndGrade(f);
+					return new FragmentDto(f, f.getStatus(), f.getGrade());
 				})
 				.toList();
 	}

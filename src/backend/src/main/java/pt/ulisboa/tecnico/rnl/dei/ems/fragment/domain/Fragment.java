@@ -50,6 +50,11 @@ public class Fragment {
 	@Transient
 	private String status;
 
+	// The grade of the fragment's corrected (SUBMITTED) PRIMARY task, or null
+	// while it is not yet corrected. Computed by the service — never persisted.
+	@Transient
+	private Double grade;
+
 	protected Fragment() {
 	}
 

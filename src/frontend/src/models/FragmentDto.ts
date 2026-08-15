@@ -6,6 +6,7 @@ export default class FragmentDto {
   subjectName?: string
   imagePath?: string
   status?: string
+  grade?: number | null
 
   constructor(obj?: Partial<FragmentDto>) {
     Object.assign(this, obj)

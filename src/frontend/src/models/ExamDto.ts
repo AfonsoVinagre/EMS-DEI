@@ -10,6 +10,7 @@ export default class ExamDto {
   uploadedByName?: string
   originalFilename?: string
   status?: string
+  grade?: number | null
 
   constructor(obj?: Partial<ExamDto>) {
     Object.assign(this, obj)

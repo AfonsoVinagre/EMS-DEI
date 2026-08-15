@@ -65,7 +65,7 @@
   </v-row>
 
   <v-row>
-    <v-col cols="12" md="6">
+    <v-col v-if="canFilterSchool" cols="12" md="6">
       <v-select
         v-model="filterSchoolId"
         :items="schools"
@@ -129,6 +129,9 @@
     class="text-left"
     no-data-text="Sem exames a apresentar."
   >
+    <template v-slot:[`item.grade`]="{ item }">
+      {{ item.grade == null ? '--' : item.grade }}
+    </template>
     <template v-slot:[`item.actions`]="{ item }">
       <v-btn
         v-if="hasFragments(item)"
@@ -181,6 +184,7 @@ const headers = [
   { title: 'Escola', key: 'schoolName', value: 'schoolName', sortable: true },
   { title: 'Disciplina', key: 'subjectName', value: 'subjectName', sortable: true },
   { title: 'Estado', key: 'status', value: 'status', sortable: true },
+  { title: 'Nota', key: 'grade', value: 'grade', sortable: true },
   { title: 'Ações', key: 'actions', value: 'actions', sortable: false }
 ]
 
@@ -197,6 +201,11 @@ const isAdminView = computed(
 
 const canUpload = computed(
   () => auth.user?.role === 'SCHOOL_STAFF' && auth.hasPermission('EXAM_CREATE')
+)
+// Staff only ever see exams from their own school (the backend filters by
+// school), so a school filter would be a no-op — hide it from them.
+const canFilterSchool = computed(
+  () => auth.user?.role !== 'SCHOOL_STAFF'
 )
 const canSubmitForm = computed(
   () => !!pickFile() && !!newStudentId.value && !!newSubjectId.value

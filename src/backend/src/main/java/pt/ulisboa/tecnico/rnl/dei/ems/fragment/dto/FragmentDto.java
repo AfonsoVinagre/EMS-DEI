@@ -13,9 +13,10 @@ public record FragmentDto(
 		long subjectId,
 		String subjectName,
 		String imagePath,
-		String status) {
+		String status,
+		Double grade) {
 
-	public FragmentDto(Fragment fragment, String status) {
+	public FragmentDto(Fragment fragment, String status, Double grade) {
 		this(
 				fragment.getId(),
 				fragment.getExam().getId(),
@@ -23,6 +24,7 @@ public record FragmentDto(
 				fragment.getSubject().getId(),
 				fragment.getSubject().getName(),
 				fragment.getImagePath(),
-				status);
+				status,
+				grade);
 	}
 }

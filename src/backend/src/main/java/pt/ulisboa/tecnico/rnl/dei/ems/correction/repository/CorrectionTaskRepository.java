@@ -17,6 +17,8 @@ public interface CorrectionTaskRepository extends JpaRepository<CorrectionTask, 
 
 	List<CorrectionTask> findByFragmentId(long fragmentId);
 
+	List<CorrectionTask> findByFragmentExamId(long examId);
+
 	List<CorrectionTask> findByTeacherId(long teacherId);
 
 	List<CorrectionTask> findByTeacherIdAndStatusIn(long teacherId, List<Status> statuses);
