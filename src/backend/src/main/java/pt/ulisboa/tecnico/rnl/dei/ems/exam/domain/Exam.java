@@ -21,7 +21,6 @@ public class Exam {
 
 	public enum ExamStatus {
 		UPLOADED,
-		SEGMENTED,
 		DISTRIBUTED,
 		CORRECTED,
 		RELEASED
