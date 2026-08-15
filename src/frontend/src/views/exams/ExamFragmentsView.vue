@@ -7,7 +7,7 @@
     title="Voltar aos exames"
   ></v-btn>
   <h2 class="text-left ml-1">
-    Fragmentos do exame #{{ examId }}
+    Exame #{{ examId }}
     <span v-if="exam" class="text-medium-emphasis text-h6">
       ({{ exam.originalFilename }})
     </span>
@@ -38,15 +38,11 @@
       <span v-else>{{ item.pageNumber }}</span>
     </template>
     <template v-slot:[`item.subjectName`]="{ item }">
-      <span v-if="(item as any)._isPdf" class="text-medium-emphasis">
-        Versão original, sem segmentação
-      </span>
+      <span v-if="(item as any)._isPdf">{{ exam?.subjectName ?? '' }}</span>
       <span v-else>{{ item.subjectName }}</span>
     </template>
     <template v-slot:[`item.status`]="{ item }">
-      <span v-if="(item as any)._isPdf" class="text-medium-emphasis">
-        Não segmentado
-      </span>
+      <span v-if="(item as any)._isPdf">{{ examStatusLabel(exam?.status) }}</span>
       <span v-else>{{ fragmentStatusLabel(item.status) }}</span>
     </template>
     <template v-slot:[`item.actions`]="{ item }">
@@ -57,7 +53,7 @@
         prepend-icon="mdi-file-pdf-box"
         color="primary"
         size="small"
-        text="Abrir PDF"
+        text="Ver Exame"
         @click="openPdf"
       ></v-btn>
       <v-btn
@@ -210,23 +206,17 @@ const headers = [
   { title: 'Ações', key: 'actions', value: 'actions', sortable: false }
 ]
 
-// Sentinel id used to render the synthetic "PDF completo" row at the top of
-// the fragments table. Real fragment ids are positive long values from the
-// DB, so a negative sentinel cannot collide.
-const PDF_ROW_ID = -1
-
-/**
- * Builds the table rows: a synthetic first row pointing at the unsegmented
- * PDF, followed by every real fragment. Each row exposes `id` so the
- * item-key + sentinel logic work uniformly.
- */
+// Sentinel flag to render the synthetic "PDF completo" row at the top of
+// the fragments table. The row uses the exam's own id (matching what
+// real fragment rows show in their ID column would be too noisy, so the
+// PDF row shows the exam id while real rows show fragment ids).
 const tableRows = computed<(FragmentDto & { _isPdf?: boolean })[]>(() => [
   {
-    id: PDF_ROW_ID,
+    id: examId,
     examId,
     pageNumber: 0,
-    subjectName: '',
-    status: 'PDF',
+    subjectName: exam.value?.subjectName ?? '',
+    status: exam.value?.status ?? 'UPLOADED',
     _isPdf: true
   },
   ...fragments.value
@@ -262,6 +252,21 @@ function phaseLabel(phase: CorrectionTaskDto['phase'] | undefined): string {
     case 'PRIMARY': return 'Em correção'
     case 'REVISION': return 'Em revisão'
     default: return ''
+  }
+}
+
+/**
+ * Translates Exam.ExamStatus (the lifecycle of the exam itself: UPLOADED
+ * → DISTRIBUTED → CORRECTED → RELEASED) to a Portuguese label for the
+ * "PDF completo" row.
+ */
+function examStatusLabel(status: string | undefined | null): string {
+  switch (status) {
+    case 'UPLOADED': return 'Submetido'
+    case 'DISTRIBUTED': return 'Distribuído'
+    case 'CORRECTED': return 'Corrigido'
+    case 'RELEASED': return 'Publicado'
+    default: return status ?? ''
   }
 }
 
