@@ -1,9 +1,16 @@
 package pt.ulisboa.tecnico.rnl.dei.ems.exam;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -76,5 +83,26 @@ public class ExamController {
 	@PreAuthorize("hasAuthority('EXAM_DISTRIBUTE')")
 	public List<Long> distributeAll() {
 		return examService.distributeAll();
+	}
+
+	/**
+	 * Streams the original (unsegmented) PDF for an exam. Used by the staff
+	 * / admin exam-detail page to show the full document alongside the
+	 * segmented fragments.
+	 */
+	@GetMapping("/exams/{id}/pdf")
+	@PreAuthorize("hasAuthority('EXAM_READ')")
+	public ResponseEntity<InputStreamResource> getPdf(@PathVariable long id) throws IOException {
+		if (SecurityUtils.currentPerson() == null) {
+			throw new DEIException(ErrorMessage.NOT_AUTHENTICATED);
+		}
+		Path pdfPath = examService.resolvePdfPath(id);
+		InputStream stream = Files.newInputStream(pdfPath);
+		HttpHeaders headers = new HttpHeaders();
+		headers.setContentType(MediaType.APPLICATION_PDF);
+		headers.setContentLength(pdfPath.toFile().length());
+		headers.setContentDispositionFormData("inline", pdfPath.getFileName().toString());
+		return new ResponseEntity<>(new InputStreamResource(stream), headers,
+				org.springframework.http.HttpStatus.OK);
 	}
 }

@@ -102,6 +102,16 @@ export default class RemoteServices {
     return httpClient.get(`/exams/school/${schoolId}/subject/${subjectId}`)
   }
 
+  static async getExamPdfUrl(id: number): Promise<string> {
+    // Same JWT-via-blob trick as the fragment image: <a href> can't send
+    // Authorization, so we fetch via the (JWT-injecting) httpClient and
+    // expose an object URL the caller is responsible for revoking.
+    const blob = (await httpClient.get(`/exams/${id}/pdf`, {
+      responseType: 'blob'
+    })) as unknown as Blob
+    return URL.createObjectURL(blob)
+  }
+
   static async distributeAllExams(): Promise<number[]> {
     return httpClient.post('/exams/distribute-all')
   }

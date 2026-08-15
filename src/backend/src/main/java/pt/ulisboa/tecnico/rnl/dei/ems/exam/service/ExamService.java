@@ -190,6 +190,21 @@ public class ExamService {
 				.orElseThrow(() -> new DEIException(ErrorMessage.NO_SUCH_EXAM, Long.toString(id)));
 	}
 
+	/**
+	 * Resolves the on-disk path to the original PDF for an exam.
+	 * Throws if the file is missing so the controller can return 404.
+	 */
+	@Transactional
+	public java.nio.file.Path resolvePdfPath(long examId) {
+		Exam exam = examRepository.findById(examId)
+				.orElseThrow(() -> new DEIException(ErrorMessage.NO_SUCH_EXAM, Long.toString(examId)));
+		java.nio.file.Path pdfPath = Paths.get(exam.getPdfPath());
+		if (!Files.exists(pdfPath)) {
+			throw new DEIException(ErrorMessage.PDF_RENDER_ERROR);
+		}
+		return pdfPath;
+	}
+
 	@Transactional
 	public List<ExamDto> listAll() {
 		return examRepository.findAll().stream()

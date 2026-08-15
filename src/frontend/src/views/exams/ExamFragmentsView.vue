@@ -27,19 +27,68 @@
 
   <v-data-table
     :headers="headers"
-    :items="fragments"
+    :items="tableRows"
     :loading="loading"
     item-key="id"
     class="text-left"
     no-data-text="Este exame ainda não tem fragmentos."
-    @click:row="onRow"
   >
+    <template v-slot:[`item.pageNumber`]="{ item }">
+      <span v-if="(item as any)._isPdf">—</span>
+      <span v-else>{{ item.pageNumber }}</span>
+    </template>
+    <template v-slot:[`item.subjectName`]="{ item }">
+      <span v-if="(item as any)._isPdf" class="text-medium-emphasis">
+        Versão original, sem segmentação
+      </span>
+      <span v-else>{{ item.subjectName }}</span>
+    </template>
     <template v-slot:[`item.status`]="{ item }">
-      {{ fragmentStatusLabel(item.status) }}
+      <span v-if="(item as any)._isPdf" class="text-medium-emphasis">
+        Não segmentado
+      </span>
+      <span v-else>{{ fragmentStatusLabel(item.status) }}</span>
     </template>
     <template v-slot:[`item.actions`]="{ item }">
+      <v-btn
+        v-if="(item as any)._isPdf"
+        :loading="pdfLoading"
+        :disabled="pdfLoading"
+        prepend-icon="mdi-file-pdf-box"
+        color="primary"
+        size="small"
+        text="Abrir PDF"
+        @click="openPdf"
+      ></v-btn>
+      <v-btn
+        v-else
+        icon="mdi-image-multiple"
+        size="small"
+        :title="'Abrir fragmento'"
+        @click="openFragment(item)"
+      ></v-btn>
     </template>
   </v-data-table>
+
+  <v-dialog v-model="pdfDrawer" max-width="900">
+    <v-card>
+      <v-card-title>PDF original do exame #{{ examId }}</v-card-title>
+      <v-card-text>
+        <iframe
+          v-if="pdfUrl"
+          :src="pdfUrl"
+          width="100%"
+          height="700"
+          style="border: 0"
+        ></iframe>
+        <v-progress-circular v-else indeterminate color="primary"></v-progress-circular>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn text="Fechar" @click="closePdf"></v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 
   <v-dialog v-model="drawer" max-width="900">
     <v-card v-if="selected">
@@ -145,6 +194,10 @@ const imageUrl = ref<string | null>(null)
 const tasks = ref<CorrectionTaskDto[]>([])
 const loadingTasks = ref(false)
 
+const pdfDrawer = ref(false)
+const pdfUrl = ref<string | null>(null)
+const pdfLoading = ref(false)
+
 const gradeDialog = ref(false)
 const grading = ref<CorrectionTaskDto | null>(null)
 const gradeInput = ref<number | null>(null)
@@ -156,6 +209,28 @@ const headers = [
   { title: 'Estado', key: 'status', value: 'status', sortable: true },
   { title: 'Ações', key: 'actions', value: 'actions', sortable: false }
 ]
+
+// Sentinel id used to render the synthetic "PDF completo" row at the top of
+// the fragments table. Real fragment ids are positive long values from the
+// DB, so a negative sentinel cannot collide.
+const PDF_ROW_ID = -1
+
+/**
+ * Builds the table rows: a synthetic first row pointing at the unsegmented
+ * PDF, followed by every real fragment. Each row exposes `id` so the
+ * item-key + sentinel logic work uniformly.
+ */
+const tableRows = computed<(FragmentDto & { _isPdf?: boolean })[]>(() => [
+  {
+    id: PDF_ROW_ID,
+    examId,
+    pageNumber: 0,
+    subjectName: '',
+    status: 'PDF',
+    _isPdf: true
+  },
+  ...fragments.value
+])
 
 const taskHeaders = [
   { title: 'Fase', key: 'phase', value: 'phase', sortable: true },
@@ -218,6 +293,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   if (imageUrl.value) URL.revokeObjectURL(imageUrl.value)
+  if (pdfUrl.value) URL.revokeObjectURL(pdfUrl.value)
 })
 
 async function refreshFragments() {
@@ -229,11 +305,35 @@ async function refreshFragments() {
   }
 }
 
-async function onRow(_: Event, row: { item: FragmentDto }) {
-  await openFragment(row.item)
+async function openFragment(item: FragmentDto) {
+  await openFragmentDialog(item)
 }
 
-async function openFragment(f: FragmentDto) {
+async function openPdf() {
+  pdfDrawer.value = true
+  pdfLoading.value = true
+  if (pdfUrl.value) {
+    URL.revokeObjectURL(pdfUrl.value)
+    pdfUrl.value = null
+  }
+  try {
+    pdfUrl.value = await RemoteService.getExamPdfUrl(examId)
+  } catch {
+    pdfUrl.value = null
+  } finally {
+    pdfLoading.value = false
+  }
+}
+
+function closePdf() {
+  pdfDrawer.value = false
+  if (pdfUrl.value) {
+    URL.revokeObjectURL(pdfUrl.value)
+    pdfUrl.value = null
+  }
+}
+
+async function openFragmentDialog(f: FragmentDto) {
   selected.value = f
   drawer.value = true
   if (imageUrl.value) {
