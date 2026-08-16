@@ -33,6 +33,7 @@ import pt.ulisboa.tecnico.rnl.dei.ems.fragment.repository.FragmentRepository;
 import pt.ulisboa.tecnico.rnl.dei.ems.person.domain.Person;
 import pt.ulisboa.tecnico.rnl.dei.ems.person.domain.Person.PersonType;
 import pt.ulisboa.tecnico.rnl.dei.ems.person.repository.PersonRepository;
+import pt.ulisboa.tecnico.rnl.dei.ems.security.SecurityUtils;
 import pt.ulisboa.tecnico.rnl.dei.ems.school.domain.School;
 import pt.ulisboa.tecnico.rnl.dei.ems.school.repository.SchoolRepository;
 import pt.ulisboa.tecnico.rnl.dei.ems.subject.domain.Subject;
@@ -183,11 +184,61 @@ public class ExamService {
 		return new ExamDto(exam);
 	}
 
+	/**
+	 * Dev convenience: creates an {@link Exam} pointing at a PDF that is
+	 * already on disk (no upload, no copy) and segments it immediately into
+	 * {@link Fragment}s. Used by {@code DataInitializer} to turn PDFs sitting
+	 * in the exams directory into fully fragmented exams. The exam starts in
+	 * {@link Exam.ExamStatus#UPLOADED}, ready for the normal lock → distribute
+	 * flow. The school is resolved from the student (as in a real upload).
+	 */
+	@Transactional
+	public ExamDto seedExamFromDisk(String pdfPath, String originalFilename,
+			long studentId, long subjectId, long uploadedById) {
+		Person student = personRepository.findById(studentId)
+				.orElseThrow(() -> new DEIException(ErrorMessage.NO_SUCH_PERSON, Long.toString(studentId)));
+		if (student.getType() != PersonType.STUDENT) {
+			throw new DEIException(ErrorMessage.PERSON_NOT_STUDENT, Long.toString(studentId));
+		}
+		Subject subject = subjectRepository.findById(subjectId)
+				.orElseThrow(() -> new DEIException(ErrorMessage.NO_SUCH_SUBJECT, Long.toString(subjectId)));
+		Person uploadedBy = personRepository.findById(uploadedById)
+				.orElseThrow(() -> new DEIException(ErrorMessage.NO_SUCH_PERSON, Long.toString(uploadedById)));
+		School school = student.getSchool();
+		if (school == null) {
+			throw new DEIException(ErrorMessage.PERSON_SCHOOL_REQUIRED);
+		}
+		ensureStorageDirExists();
+		Exam exam = examRepository.save(
+				new Exam(pdfPath, originalFilename, student, school, subject, uploadedBy));
+		segmentInternal(exam);
+		return new ExamDto(exam);
+	}
+
 	@Transactional
 	public ExamDto getExam(long id) {
-		return examRepository.findById(id)
-				.map(exam -> new ExamDto(exam, totalGrade(exam)))
+		return getExam(id, SecurityUtils.currentPerson());
+	}
+
+	/**
+	 * Caller-aware single-exam read. Students only ever see their own exams,
+	 * and their grade is gated to {@link Exam.ExamStatus#RELEASED} (before
+	 * release the total is not theirs to see). Staff/admins see the real
+	 * total grade (non-null once CORRECTED/RELEASED).
+	 */
+	@Transactional
+	public ExamDto getExam(long id, Person current) {
+		Exam exam = examRepository.findById(id)
 				.orElseThrow(() -> new DEIException(ErrorMessage.NO_SUCH_EXAM, Long.toString(id)));
+		Double grade = (current != null && current.getType() == PersonType.STUDENT)
+				? studentGrade(exam)
+				: totalGrade(exam);
+		if (current != null && current.getType() == PersonType.STUDENT
+				&& !exam.getStudent().getId().equals(current.getId())) {
+			// Don't reveal that another student's exam exists.
+			throw new DEIException(ErrorMessage.NO_SUCH_EXAM, Long.toString(id));
+		}
+		return new ExamDto(exam, grade);
 	}
 
 	/**
@@ -214,8 +265,9 @@ public class ExamService {
 
 	/**
 	 * Scoped listing for the requesting user. Admins see every exam; school
-	 * staff see only the exams belonging to their own school; teachers and
-	 * students fall back to the unfiltered list (read-only).
+	 * staff see only the exams belonging to their own school; students see
+	 * only their own exams (with the grade hidden until RELEASED). Teachers
+	 * fall back to the unfiltered list (read-only).
 	 */
 	@Transactional
 	public List<ExamDto> listAll(Person current) {
@@ -228,6 +280,11 @@ public class ExamService {
 			}
 			return examRepository.findBySchoolId(current.getSchool().getId()).stream()
 					.map(exam -> new ExamDto(exam, totalGrade(exam)))
+					.toList();
+		}
+		if (current.getType() == PersonType.STUDENT) {
+			return examRepository.findByStudentId(current.getId()).stream()
+					.map(exam -> new ExamDto(exam, studentGrade(exam)))
 					.toList();
 		}
 		return listAll();
@@ -376,5 +433,73 @@ public class ExamService {
 				.filter(java.util.Objects::nonNull)
 				.mapToDouble(Double::doubleValue)
 				.sum();
+	}
+
+	/**
+	 * Grade as seen by a student: hidden until the exam is released. Once
+	 * {@link Exam.ExamStatus#RELEASED}, matches {@link #totalGrade(Exam)}.
+	 */
+	private Double studentGrade(Exam exam) {
+		if (exam.getStatus() != Exam.ExamStatus.RELEASED) {
+			return null;
+		}
+		return totalGrade(exam);
+	}
+
+	/**
+	 * Releases a corrected exam: {@code CORRECTED -> RELEASED}. Idempotent for
+	 * an already-released exam; throws if the exam is not yet fully corrected.
+	 */
+	@Transactional
+	public void releaseExam(long examId) {
+		Exam exam = examRepository.findById(examId)
+				.orElseThrow(() -> new DEIException(ErrorMessage.NO_SUCH_EXAM, Long.toString(examId)));
+		if (exam.getStatus() == Exam.ExamStatus.RELEASED) {
+			return;
+		}
+		if (exam.getStatus() != Exam.ExamStatus.CORRECTED) {
+			throw new DEIException(ErrorMessage.EXAM_NOT_CORRECTED);
+		}
+		exam.setStatus(Exam.ExamStatus.RELEASED);
+		examRepository.save(exam);
+	}
+
+	/**
+	 * Bulk release: every CORRECTED exam of the caller's school for the given
+	 * subject transitions to RELEASED. Returns the ids of the released exams
+	 * (the staff UI reports how many were made available).
+	 */
+	@Transactional
+	public List<Long> bulkRelease(Person current, long subjectId) {
+		if (current.getType() != PersonType.SCHOOL_STAFF || current.getSchool() == null) {
+			throw new DEIException(ErrorMessage.ACCESS_DENIED);
+		}
+		List<Exam> corrected = examRepository.findBySchoolIdAndSubjectIdAndStatus(
+				current.getSchool().getId(), subjectId, Exam.ExamStatus.CORRECTED);
+		for (Exam exam : corrected) {
+			exam.setStatus(Exam.ExamStatus.RELEASED);
+			examRepository.save(exam);
+		}
+		return corrected.stream().map(Exam::getId).toList();
+	}
+
+	/**
+	 * Guard for content endpoints (PDF, fragment images) a student should only
+	 * reach for their own released exams. Throws {@code NO_SUCH_EXAM} (so as
+	 * not to reveal existence) if the caller is a student who does not own the
+	 * exam or whose exam is not yet released.
+	 */
+	@Transactional
+	public void assertStudentCanViewContent(long examId) {
+		Person current = SecurityUtils.currentPerson();
+		if (current == null || current.getType() != PersonType.STUDENT) {
+			return;
+		}
+		Exam exam = examRepository.findById(examId)
+				.orElseThrow(() -> new DEIException(ErrorMessage.NO_SUCH_EXAM, Long.toString(examId)));
+		if (!exam.getStudent().getId().equals(current.getId())
+				|| exam.getStatus() != Exam.ExamStatus.RELEASED) {
+			throw new DEIException(ErrorMessage.NO_SUCH_EXAM, Long.toString(examId));
+		}
 	}
 }

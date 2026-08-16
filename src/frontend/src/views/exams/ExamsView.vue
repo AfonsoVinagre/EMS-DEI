@@ -188,7 +188,9 @@ const isAdminView = computed(
 )
 
 const canUpload = computed(
-  () => auth.user?.role === 'SCHOOL_STAFF' && auth.hasPermission('EXAM_CREATE')
+  () => auth.user?.role === 'SCHOOL_STAFF'
+    && auth.hasPermission('EXAM_CREATE')
+    && !systemState.value?.distributed
 )
 // Staff only ever see exams from their own school (the backend filters by
 // school), so a school filter would be a no-op — hide it from them.

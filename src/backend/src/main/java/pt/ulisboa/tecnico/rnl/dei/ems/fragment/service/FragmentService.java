@@ -16,6 +16,7 @@ import pt.ulisboa.tecnico.rnl.dei.ems.correction.domain.CorrectionTask;
 import pt.ulisboa.tecnico.rnl.dei.ems.correction.repository.CorrectionTaskRepository;
 import pt.ulisboa.tecnico.rnl.dei.ems.exceptions.DEIException;
 import pt.ulisboa.tecnico.rnl.dei.ems.exceptions.ErrorMessage;
+import pt.ulisboa.tecnico.rnl.dei.ems.exam.domain.Exam;
 import pt.ulisboa.tecnico.rnl.dei.ems.fragment.domain.Fragment;
 import pt.ulisboa.tecnico.rnl.dei.ems.fragment.dto.FragmentDto;
 import pt.ulisboa.tecnico.rnl.dei.ems.fragment.repository.FragmentRepository;
@@ -27,9 +28,11 @@ import pt.ulisboa.tecnico.rnl.dei.ems.security.SecurityUtils;
  * Fragment reads are role-filtered:
  *
  * <ul>
- *   <li>ADMINISTRATOR / SCHOOL_STAFF: see everything.</li>
+ *   <li>ADMINISTRATOR / SCHOOL_STAFF: see everything (staff scoped to their
+ *       school).</li>
  *   <li>TEACHER: only see fragments where they have at least one task.</li>
- *   <li>STUDENT: none in this phase.</li>
+ *   <li>STUDENT: only see fragments of their own exams once the exam has been
+ *       released (consultation access).</li>
  * </ul>
  */
 @Service
@@ -101,6 +104,13 @@ public class FragmentService {
 		if (type == PersonType.TEACHER) {
 			return correctionTaskRepository.findByFragmentId(fragment.getId()).stream()
 					.anyMatch(t -> t.getTeacher().getId().equals(current.getId()));
+		}
+		if (type == PersonType.STUDENT) {
+			// Consultation access: a student sees fragments only of their own
+			// exams once released. This gates listByExam, get(), and the
+			// fragment image endpoint (which calls get()).
+			return fragment.getExam().getStudent().getId().equals(current.getId())
+					&& fragment.getExam().getStatus() == Exam.ExamStatus.RELEASED;
 		}
 		return false;
 	}

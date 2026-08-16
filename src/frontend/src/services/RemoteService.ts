@@ -11,6 +11,7 @@ import type TeacherAssignmentDto from '@/models/TeacherAssignmentDto'
 import type ExamDto from '@/models/ExamDto'
 import type FragmentDto from '@/models/FragmentDto'
 import type CorrectionTaskDto from '@/models/CorrectionTaskDto'
+import type ConsultationRequestDto from '@/models/ConsultationRequestDto'
 import type SystemStateDto from '@/models/SystemStateDto'
 
 const httpClient = axios.create()
@@ -114,6 +115,33 @@ export default class RemoteServices {
 
   static async distributeAllExams(): Promise<number[]> {
     return httpClient.post('/exams/distribute-all')
+  }
+
+  static async bulkReleaseExams(subjectId: number): Promise<number[]> {
+    return httpClient.post('/exams/bulk-release', null, {
+      params: { subjectId }
+    })
+  }
+
+  // --- Consultation requests ---
+  static async createConsultationRequest(examId: number): Promise<ConsultationRequestDto> {
+    return httpClient.post('/consultation-requests', { examId })
+  }
+
+  static async getMyConsultationRequests(): Promise<ConsultationRequestDto[]> {
+    return httpClient.get('/consultation-requests/mine')
+  }
+
+  static async getConsultationRequests(): Promise<ConsultationRequestDto[]> {
+    return httpClient.get('/consultation-requests')
+  }
+
+  static async approveConsultationRequest(id: number): Promise<ConsultationRequestDto> {
+    return httpClient.post(`/consultation-requests/${id}/approve`)
+  }
+
+  static async rejectConsultationRequest(id: number): Promise<ConsultationRequestDto> {
+    return httpClient.post(`/consultation-requests/${id}/reject`)
   }
 
   // --- Fragments ---

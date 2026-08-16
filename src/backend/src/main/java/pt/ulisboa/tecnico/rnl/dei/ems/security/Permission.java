@@ -20,5 +20,6 @@ public enum Permission {
 	EXAM_CREATE,
 	EXAM_READ,
 	EXAM_DISTRIBUTE,
-	EXAM_LOCK
+	EXAM_LOCK,
+	EXAM_RELEASE
 }

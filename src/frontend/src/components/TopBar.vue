@@ -31,7 +31,9 @@ const navbarItems: NavItem[] = [
     'SCHOOL_STAFF'
   ] },
   { name: 'Classificações', path: '/statistics', icon: 'mdi-chart-bar', roles: ['SCHOOL_STAFF'] },
-  { name: 'Correcções', path: '/corrections', icon: 'mdi-clipboard-check-outline', roles: ['TEACHER'] }
+  { name: 'Consultas', path: '/staff-consultations', icon: 'mdi-eye-check-outline', roles: ['SCHOOL_STAFF'] },
+  { name: 'Correcções', path: '/corrections', icon: 'mdi-clipboard-check-outline', roles: ['TEACHER'] },
+  { name: 'As minhas provas', path: '/my-exams', icon: 'mdi-file-eye-outline', roles: ['STUDENT'] }
 ]
 
 const visibleNavbarItems = computed(() => {

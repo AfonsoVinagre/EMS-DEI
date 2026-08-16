@@ -54,7 +54,13 @@ public enum ErrorMessage {
 	STAFF_UPLOAD_TO_OTHER_SCHOOL("Só pode submeter exames de alunos da sua escola.", 5025),
 	EXAMS_ALREADY_DISTRIBUTED("Os exames já foram distribuídos — o lock não pode ser revertido.", 5030),
 	PERSON_SCHOOL_REQUIRED("Esta conta tem de ter uma escola atribuída.", 5026),
-	PERSON_SCHOOL_NOT_APPLICABLE("Um administrador não tem escola atribuída.", 5027);
+	PERSON_SCHOOL_NOT_APPLICABLE("Um administrador não tem escola atribuída.", 5027),
+
+	NO_SUCH_CONSULTATION_REQUEST("Não existe nenhum pedido de consulta com o ID %s", 6001),
+	CONSULTATION_REQUEST_NOT_PENDING("O pedido de consulta já foi decidido.", 6002),
+	EXAM_NOT_CORRECTED("O exame ainda não está totalmente corrigido.", 6003),
+	CONSULTATION_REQUEST_ALREADY_PENDING("Já existe um pedido de consulta pendente para este exame.", 6004),
+	EXAM_ALREADY_RELEASED("O exame já foi disponibilizado.", 6005);
 
 	private final String label;
 	private final int code;

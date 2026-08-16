@@ -23,6 +23,7 @@ import pt.ulisboa.tecnico.rnl.dei.ems.exceptions.DEIException;
 import pt.ulisboa.tecnico.rnl.dei.ems.exceptions.ErrorMessage;
 import pt.ulisboa.tecnico.rnl.dei.ems.exam.dto.ExamDto;
 import pt.ulisboa.tecnico.rnl.dei.ems.exam.service.ExamService;
+import pt.ulisboa.tecnico.rnl.dei.ems.consultation.service.ConsultationService;
 import pt.ulisboa.tecnico.rnl.dei.ems.person.domain.Person;
 import pt.ulisboa.tecnico.rnl.dei.ems.security.SecurityUtils;
 
@@ -31,6 +32,9 @@ public class ExamController {
 
 	@Autowired
 	private ExamService examService;
+
+	@Autowired
+	private ConsultationService consultationService;
 
 	@PostMapping(value = "/exams", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	@PreAuthorize("hasAuthority('EXAM_CREATE')")
@@ -90,12 +94,20 @@ public class ExamController {
 	 * / admin exam-detail page to show the full document alongside the
 	 * segmented fragments.
 	 */
+	/**
+	 * Streams the original (unsegmented) PDF for an exam. Used by the staff
+	 * / admin exam-detail page to show the full document alongside the
+	 * segmented fragments. Students may only fetch the PDF of their own
+	 * exams once those have been released.
+	 */
 	@GetMapping("/exams/{id}/pdf")
 	@PreAuthorize("hasAuthority('EXAM_READ')")
 	public ResponseEntity<InputStreamResource> getPdf(@PathVariable long id) throws IOException {
 		if (SecurityUtils.currentPerson() == null) {
 			throw new DEIException(ErrorMessage.NOT_AUTHENTICATED);
 		}
+		// Students are gated to their own released exams; staff/admins pass through.
+		examService.assertStudentCanViewContent(id);
 		Path pdfPath = examService.resolvePdfPath(id);
 		InputStream stream = Files.newInputStream(pdfPath);
 		HttpHeaders headers = new HttpHeaders();
@@ -104,5 +116,25 @@ public class ExamController {
 		headers.setContentDispositionFormData("inline", pdfPath.getFileName().toString());
 		return new ResponseEntity<>(new InputStreamResource(stream), headers,
 				org.springframework.http.HttpStatus.OK);
+	}
+
+	/**
+	 * School-staff bulk release: every CORRECTED exam of the caller's school
+	 * for the given subject is made available to students (RELEASED). Returns
+	 * the ids of the released exams so the UI can confirm the count.
+	 */
+	@PostMapping("/exams/bulk-release")
+	@PreAuthorize("hasAuthority('EXAM_RELEASE')")
+	public List<Long> bulkRelease(@RequestParam long subjectId) {
+		Person current = SecurityUtils.currentPerson();
+		if (current == null) {
+			throw new DEIException(ErrorMessage.NOT_AUTHENTICATED);
+		}
+		List<Long> released = examService.bulkRelease(current, subjectId);
+		// Reflect the granted access on any pending consultation requests for
+		// these exams so a student's pending request doesn't linger after the
+		// exam was bulk-released.
+		consultationService.approveForExams(current, released);
+		return released;
 	}
 }

@@ -30,7 +30,8 @@ public final class RolePermissions {
 				Permission.SCHOOL_READ,
 				Permission.SUBJECT_READ,
 				Permission.EXAM_CREATE,
-				Permission.EXAM_READ));
+				Permission.EXAM_READ,
+				Permission.EXAM_RELEASE));
 
 		// Teachers can read people and statistics.
 		ROLE_PERMISSIONS.put(PersonType.TEACHER, EnumSet.of(

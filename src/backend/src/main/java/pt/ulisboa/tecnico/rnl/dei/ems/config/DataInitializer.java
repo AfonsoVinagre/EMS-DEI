@@ -1,11 +1,17 @@
 package pt.ulisboa.tecnico.rnl.dei.ems.config;
 
+import java.io.File;
+import java.util.List;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
+import pt.ulisboa.tecnico.rnl.dei.ems.exam.repository.ExamRepository;
+import pt.ulisboa.tecnico.rnl.dei.ems.exam.service.ExamService;
 import pt.ulisboa.tecnico.rnl.dei.ems.person.domain.Person;
 import pt.ulisboa.tecnico.rnl.dei.ems.person.domain.Person.PersonType;
 import pt.ulisboa.tecnico.rnl.dei.ems.person.repository.PersonRepository;
@@ -68,16 +74,24 @@ public class DataInitializer implements CommandLineRunner {
 	private final SchoolRepository schoolRepository;
 	private final SubjectRepository subjectRepository;
 	private final TeacherAssignmentRepository teacherAssignmentRepository;
+	private final ExamService examService;
+	private final ExamRepository examRepository;
+
+	@Value("${ems.storage.exams-dir}")
+	private String examsDir;
 
 	public DataInitializer(PersonRepository personRepository, PasswordEncoder passwordEncoder,
 			SystemStateRepository systemStateRepository, SchoolRepository schoolRepository,
-			SubjectRepository subjectRepository, TeacherAssignmentRepository teacherAssignmentRepository) {
+			SubjectRepository subjectRepository, TeacherAssignmentRepository teacherAssignmentRepository,
+			ExamService examService, ExamRepository examRepository) {
 		this.personRepository = personRepository;
 		this.passwordEncoder = passwordEncoder;
 		this.systemStateRepository = systemStateRepository;
 		this.schoolRepository = schoolRepository;
 		this.subjectRepository = subjectRepository;
 		this.teacherAssignmentRepository = teacherAssignmentRepository;
+		this.examService = examService;
+		this.examRepository = examRepository;
 	}
 
 	@Override
@@ -127,7 +141,64 @@ public class DataInitializer implements CommandLineRunner {
 		upsertPerson("Hugo Pinto",     "hugo.pinto@ems.pt",     "password123", PersonType.STUDENT, fct);
 
 		upsertSystemState();
+
+		// Turn every PDF currently sitting in the exams directory into a fully
+		// fragmented exam (Exam + per-page Fragment PNGs), ready for the
+		// normal lock → distribute flow. Safe to re-run: PDFs already seeded
+		// (matched by their on-disk path) are skipped.
+		seedExamsFromFolder();
+
 		logger.info("DataInitializer: done");
+	}
+
+	/**
+	 * Scans the exams storage directory for PDFs and creates a fragmented exam
+	 * for each one that is not already seeded. Students and subjects are
+	 * assigned round-robin among the seeded demo data; the school comes from
+	 * the student (as in a real upload). Logged in as the global admin, so the
+	 * staff upload-lock guard does not apply.
+	 */
+	private void seedExamsFromFolder() {
+		File dir = new File(examsDir);
+		if (!dir.isDirectory()) {
+			logger.info("Seeding exams: exams dir '{}' not found, skipping", examsDir);
+			return;
+		}
+		File[] pdfs = dir.listFiles((d, name) -> name.toLowerCase().endsWith(".pdf"));
+		if (pdfs == null || pdfs.length == 0) {
+			logger.info("Seeding exams: no PDFs in '{}', skipping", examsDir);
+			return;
+		}
+		List<Person> students = personRepository.findAll().stream()
+				.filter(p -> p.getType() == PersonType.STUDENT)
+				.toList();
+		List<Subject> subjects = subjectRepository.findAll();
+		Person admin = personRepository.findByEmail("admin@ems.pt").orElse(null);
+		if (students.isEmpty() || subjects.isEmpty() || admin == null) {
+			logger.warn("Seeding exams: missing students/subjects/admin, skipping");
+			return;
+		}
+		int i = 0;
+		int seeded = 0;
+		for (File pdf : pdfs) {
+			String path = pdf.getAbsolutePath();
+			if (examRepository.existsByPdfPath(path)) {
+				continue;
+			}
+			Person student = students.get(i % students.size());
+			Subject subject = subjects.get(i % subjects.size());
+			try {
+				examService.seedExamFromDisk(path, pdf.getName(),
+						student.getId(), subject.getId(), admin.getId());
+				logger.info("Seeded exam from file: {} (student={}, subject={})",
+						pdf.getName(), student.getEmail(), subject.getCode());
+				seeded++;
+			} catch (Exception e) {
+				logger.warn("Failed to seed exam from {}: {}", pdf.getName(), e.getMessage());
+			}
+			i++;
+		}
+		logger.info("Seeding exams: {} new exam(s) created from folder", seeded);
 	}
 
 	private School upsertSchool(String name, String code, String region) {

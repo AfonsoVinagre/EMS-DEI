@@ -9,6 +9,9 @@ import TeacherAssignmentsView from '@/views/teacherassignments/TeacherAssignment
 import ExamsView from '@/views/exams/ExamsView.vue'
 import ExamFragmentsView from '@/views/exams/ExamFragmentsView.vue'
 import CorrectionsView from '@/views/corrections/CorrectionsView.vue'
+import MyExamsView from '@/views/consultations/MyExamsView.vue'
+import ExamConsultationView from '@/views/consultations/ExamConsultationView.vue'
+import StaffConsultationView from '@/views/consultations/StaffConsultationView.vue'
 import { useAuthStore } from '@/stores/auth'
 
 // Roles that may enter each page (in addition to the permission check).
@@ -17,6 +20,7 @@ import { useAuthStore } from '@/stores/auth'
 // navigation.
 const EXAM_ROLES = ['ADMINISTRATOR', 'SCHOOL_STAFF']
 const TEACHER_ROLES = ['TEACHER']
+const STUDENT_ROLES = ['STUDENT']
 const ADMIN_ONLY = ['ADMINISTRATOR']
 
 const router = createRouter({
@@ -80,6 +84,32 @@ const router = createRouter({
       name: 'corrections',
       component: CorrectionsView,
       meta: { permission: 'EXAM_READ', allowedRoles: TEACHER_ROLES }
+    },
+    {
+      // Student's own exams (metadata only) + consultation requests. The
+      // backend scopes getExams() to the student and gates the grade until
+      // the exam is RELEASED.
+      path: '/my-exams',
+      name: 'my-exams',
+      component: MyExamsView,
+      meta: { permission: 'EXAM_READ', allowedRoles: STUDENT_ROLES }
+    },
+    {
+      // Student consultation view: PDF + per-fragment grades side by side.
+      // Server-side scoping (own + RELEASED) backs this up; non-released or
+      // foreign exams are surfaced as "no access".
+      path: '/my-exams/:id',
+      name: 'my-exam-detail',
+      component: ExamConsultationView,
+      meta: { permission: 'EXAM_READ', allowedRoles: STUDENT_ROLES }
+    },
+    {
+      // Staff release surface: approve/reject consultation requests + bulk
+      // release per subject.
+      path: '/staff-consultations',
+      name: 'staff-consultations',
+      component: StaffConsultationView,
+      meta: { permission: 'EXAM_RELEASE', allowedRoles: ['SCHOOL_STAFF'] }
     }
   ]
 })
@@ -109,6 +139,7 @@ router.beforeEach((to) => {
   if (to.name === 'home') {
     if (auth.user?.role === 'SCHOOL_STAFF') return { name: 'exams' }
     if (auth.user?.role === 'TEACHER') return { name: 'corrections' }
+    if (auth.user?.role === 'STUDENT') return { name: 'my-exams' }
   }
 
   const allowedRoles = to.meta.allowedRoles as string[] | undefined
