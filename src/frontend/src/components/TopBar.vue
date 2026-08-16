@@ -30,8 +30,8 @@ const navbarItems: NavItem[] = [
     'ADMINISTRATOR',
     'SCHOOL_STAFF'
   ] },
-  { name: 'Correcções', path: '/corrections', icon: 'mdi-clipboard-check-outline', roles: ['TEACHER'] },
-  { name: 'Estatísticas', path: '/statistics', icon: 'mdi-chart-bar', roles: ['ADMINISTRATOR'] }
+  { name: 'Classificações', path: '/statistics', icon: 'mdi-chart-bar', roles: ['SCHOOL_STAFF'] },
+  { name: 'Correcções', path: '/corrections', icon: 'mdi-clipboard-check-outline', roles: ['TEACHER'] }
 ]
 
 const visibleNavbarItems = computed(() => {

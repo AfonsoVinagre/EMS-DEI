@@ -43,7 +43,7 @@ const router = createRouter({
       path: '/statistics',
       name: 'statistics',
       component: StatisticsView,
-      meta: { permission: 'STATISTICS_READ', allowedRoles: ADMIN_ONLY }
+      meta: { permission: 'STATISTICS_READ', allowedRoles: ['SCHOOL_STAFF'] }
     },
     {
       path: '/schools',

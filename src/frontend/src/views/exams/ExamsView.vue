@@ -76,17 +76,6 @@
         clearable
       ></v-select>
     </v-col>
-    <v-col cols="12" md="6">
-      <v-select
-        v-model="filterSubjectId"
-        :items="subjects"
-        :loading="loadingSubjects"
-        item-title="name"
-        item-value="id"
-        label="Filtrar por disciplina"
-        clearable
-      ></v-select>
-    </v-col>
   </v-row>
 
   <!-- Global action bar: lock/unlock uploads (admin-only) and distribute
@@ -161,7 +150,6 @@ const newStudentId = ref<number | undefined>(undefined)
 const newSubjectId = ref<number | undefined>(undefined)
 
 const filterSchoolId = ref<number | undefined>(undefined)
-const filterSubjectId = ref<number | undefined>(undefined)
 
 const students = ref<PersonDto[]>([])
 const schools = ref<SchoolDto[]>([])
@@ -226,7 +214,6 @@ const uploadsDisabled = computed(() => systemState.value?.examsLocked === true)
 const filteredExams = computed(() =>
   exams.value.filter((e) => {
     if (filterSchoolId.value != null && e.schoolId !== filterSchoolId.value) return false
-    if (filterSubjectId.value != null && e.subjectId !== filterSubjectId.value) return false
     return true
   })
 )

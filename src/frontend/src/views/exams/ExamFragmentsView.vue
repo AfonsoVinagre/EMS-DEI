@@ -30,9 +30,11 @@
     :items="tableRows"
     :loading="loading"
     item-key="id"
+    :items-per-page="-1"
     class="text-left"
     no-data-text="Este exame ainda não tem fragmentos."
   >
+    <template v-slot:bottom></template>
     <template v-slot:[`item.pageNumber`]="{ item }">
       <span v-if="(item as any)._isPdf">—</span>
       <span v-else>{{ item.pageNumber }}</span>
@@ -117,9 +119,11 @@
           :items="tasks"
           :loading="loadingTasks"
           item-key="id"
+          :items-per-page="-1"
           no-data-text="Sem tarefas."
           class="text-left"
         >
+          <template v-slot:bottom></template>
           <template v-slot:[`item.phase`]="{ item }">
             {{ phaseLabel(item.phase) }}
           </template>

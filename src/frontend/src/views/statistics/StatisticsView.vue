@@ -1,98 +1,130 @@
-<!-- This is just a mockup of the StatisticsView.vue component -->
-<!-- It is not meant to be your final implementation -->
-<!-- You should replace this file with your own implementation -->
-<!-- You are free to explore the available javascript libraries for charts and graphs -->
-<!-- Some popular libraries are Chart.js, D3.js, vue-chartjs, ... -->
-<!-- You can also use Vuetify components to enhance the visual appeal of your statistics -->
-
 <template>
-  <v-container>
-    <v-row class="mb-6">
-      <v-col cols="12">
-        <h1 class="text-h4 text-center mb-4">UCs Statistics Dashboard</h1>
-      </v-col>
-    </v-row>
+  <v-btn
+    icon="mdi-arrow-left"
+    size="small"
+    variant="text"
+    :to="'/exams'"
+    title="Voltar aos exames"
+  ></v-btn>
+  <h2 class="text-left ml-1">Classificações Finais</h2>
 
-    <!-- Grade Reviews Progress Section -->
-    <v-row class="mb-6">
-      <v-col cols="12">
-        <h2 class="text-h5 mb-4">Grade Reviews Progress</h2>
-        <v-row>
-          <v-col
-            v-for="(count, step) in reviewsProgress"
-            :key="step"
-            cols="12"
-            sm="6"
-            md="4"
-            lg="3"
-          >
-            <v-card class="stat-card">
-              <v-card-text class="text-center">
-                <h3 class="text-h6">{{ step }}</h3>
-                <p class="text-h4 font-weight-bold">{{ count }}</p>
-                <p class="text-caption">students</p>
-              </v-card-text>
-            </v-card>
-          </v-col>
-        </v-row>
-      </v-col>
-    </v-row>
+  <p class="text-left text-medium-emphasis mb-4">
+    Escola: <strong>{{ schoolName || '—' }}</strong>. Só são listados exames já
+    totalmente corrigidos (todas as perguntas submetidas).
+  </p>
 
-    <!-- Project Submissions Section -->
-    <v-row class="mb-6">
-      <v-col cols="12">
-        <h2 class="text-h5 mb-4">Project Submissions</h2>
-        <v-row>
-          <v-col
-            v-for="(count, step) in projectSubmissions"
-            :key="step"
-            cols="12"
-            sm="6"
-            md="4"
-            lg="3"
-          >
-            <v-card class="stat-card">
-              <v-card-text class="text-center">
-                <h3 class="text-h6">{{ step }}</h3>
-                <p class="text-h4 font-weight-bold">{{ count }}</p>
-                <p class="text-caption">students</p>
-              </v-card-text>
-            </v-card>
-          </v-col>
-        </v-row>
-      </v-col>
-    </v-row>
-  </v-container>
+  <v-row>
+    <v-col cols="12" md="6">
+      <v-select
+        v-model="selectedSubjectId"
+        :items="subjects"
+        :loading="loadingSubjects"
+        item-title="name"
+        item-value="id"
+        label="Disciplina"
+        clearable
+      ></v-select>
+    </v-col>
+  </v-row>
+
+  <!-- Disciplina mostrada como cabeçalho no topo da tabela, não como coluna. -->
+  <div v-if="selectedSubjectName" class="text-left mt-2 mb-2">
+    <h3>Disciplina: {{ selectedSubjectName }}</h3>
+  </div>
+
+  <v-data-table
+    v-if="selectedSubjectId != null"
+    :headers="headers"
+    :items="rows"
+    :loading="loadingExams"
+    item-key="id"
+    class="text-left"
+    no-data-text="Não há exames corrigidos para esta disciplina."
+  >
+    <template v-slot:[`item.grade`]="{ item }">
+      {{ item.grade }}
+    </template>
+  </v-data-table>
+
+  <v-alert
+    v-else
+    type="info"
+    variant="tonal"
+    class="text-left mt-2"
+  >
+    Selecione uma disciplina para gerar a tabela.
+  </v-alert>
 </template>
 
-<script setup>
-import { ref } from 'vue'
+<script setup lang="ts">
+import type ExamDto from '@/models/ExamDto'
+import type SubjectDto from '@/models/SubjectDto'
+import RemoteService from '@/services/RemoteService'
+import { useAuthStore } from '@/stores/auth'
+import { computed, ref } from 'vue'
 
-// Mock data for reviews progress
-const reviewsProgress = ref({
-  'Submitted': 5,
-  'In Analysis': 7,
-  'In review': 3,
-  'Accepted': 4,
-  'Rejected': 1
+const auth = useAuthStore()
+
+const subjects = ref<SubjectDto[]>([])
+const exams = ref<ExamDto[]>([])
+const loadingSubjects = ref(true)
+const loadingExams = ref(false)
+const selectedSubjectId = ref<number | undefined>(undefined)
+
+const headers = [
+  { title: 'Aluno', key: 'studentName', value: 'studentName', sortable: true },
+  { title: 'Nota', key: 'grade', value: 'grade', sortable: true }
+]
+
+// Exames da própria escola do caller, já corrigidos (grade != null só quando
+// CORRECTED/RELEASED — i.e. todos os fragmentos submetidos), da disciplina
+// escolhida. getExams() é scoping-por-escola server-side para staff, pelo que
+// um staff nunca vê aqui exames de outra escola.
+const rows = computed(() =>
+  exams.value
+    .filter(
+      (e) =>
+        e.grade != null &&
+        selectedSubjectId.value != null &&
+        e.subjectId === selectedSubjectId.value
+    )
+    .slice()
+    .sort((a, b) => (a.studentName ?? '').localeCompare(b.studentName ?? ''))
+)
+
+const selectedSubjectName = computed(() => {
+  if (selectedSubjectId.value == null) return ''
+  const subj = subjects.value.find((s) => s.id === selectedSubjectId.value)
+  return subj?.name ?? ''
 })
 
-// Mock data for project submissions
-const projectSubmissions = ref({
-  'Submitted': 5,
-  'Automatically Evaluated': 3,
-  'Under Manual Review': 4,
-  'Finalized': 6
-})
+// Nome da escola para contexto. Staff tem sempre escola; fallback ao
+// schoolName de algum exame se necessário.
+const schoolName = computed(
+  () =>
+    auth.user?.schoolName ??
+    exams.value.find((e) => e.schoolName)?.schoolName ??
+    ''
+)
+
+async function loadSubjects() {
+  loadingSubjects.value = true
+  try {
+    subjects.value = await RemoteService.getSubjects()
+  } finally {
+    loadingSubjects.value = false
+  }
+}
+
+async function loadExams() {
+  loadingExams.value = true
+  try {
+    exams.value = await RemoteService.getExams()
+  } finally {
+    loadingExams.value = false
+  }
+}
+
+loadSubjects()
+loadExams()
 </script>
-
-<style scoped>
-.stat-card {
-  transition: transform 0.2s ease-in-out;
-}
-
-.stat-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-}
-</style>
