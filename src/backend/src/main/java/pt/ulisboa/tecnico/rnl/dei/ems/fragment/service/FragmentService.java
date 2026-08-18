@@ -65,11 +65,25 @@ public class FragmentService {
 	}
 
 	/**
-	 * The grade of the fragment's corrected PRIMARY task — i.e. the grade the
-	 * assigned teacher submitted. Null while the fragment is not yet
-	 * corrected (no SUBMITTED PRIMARY task), so the UI renders "--".
+	 * The <em>definitive</em> grade of the fragment: the grade of its submitted
+	 * {@code REVISION} task if any (the final grade set during revisão), falling
+	 * back to the grade of its submitted {@code PRIMARY} task. Null while the
+	 * fragment is not yet corrected (no SUBMITTED task), so the UI renders "--".
+	 *
+	 * <p>Kept in sync with {@code ExamService.definitiveGrade} so the per-fragment
+	 * and per-exam views agree.
 	 */
 	private Double computeGrade(List<CorrectionTask> tasks) {
+		Double revision = tasks.stream()
+				.filter(t -> t.getPhase() == CorrectionTask.Phase.REVISION
+						&& t.getStatus() == CorrectionTask.Status.SUBMITTED)
+				.map(CorrectionTask::getGrade)
+				.filter(java.util.Objects::nonNull)
+				.findFirst()
+				.orElse(null);
+		if (revision != null) {
+			return revision;
+		}
 		return tasks.stream()
 				.filter(t -> t.getPhase() == CorrectionTask.Phase.PRIMARY
 						&& t.getStatus() == CorrectionTask.Status.SUBMITTED)
@@ -79,8 +93,21 @@ public class FragmentService {
 				.orElse(null);
 	}
 
-	private void populateStatusAndGrade(Fragment fragment) {
+	/**
+	 * Computes the fragment's status and grade. For a TEACHER, only that
+	 * teacher's own tasks on the fragment are considered — so a fragment whose
+	 * REVISION was assigned to a *different* teacher does not show up as
+	 * "Em revisão" for the teacher who only did the PRIMARY (and vice-versa).
+	 * Admins/staff/students see the global view (all tasks).
+	 */
+	private void populateStatusAndGrade(Fragment fragment, Person current) {
 		List<CorrectionTask> tasks = correctionTaskRepository.findByFragmentId(fragment.getId());
+		if (current != null && current.getType() == PersonType.TEACHER) {
+			long teacherId = current.getId();
+			tasks = tasks.stream()
+					.filter(t -> t.getTeacher().getId().equals(teacherId))
+					.toList();
+		}
 		fragment.setStatus(computeStatus(tasks));
 		fragment.setGrade(computeGrade(tasks));
 	}
@@ -125,7 +152,7 @@ public class FragmentService {
 		return all.stream()
 				.filter(this::currentMaySee)
 				.map(f -> {
-					populateStatusAndGrade(f);
+					populateStatusAndGrade(f, current);
 					return new FragmentDto(f, f.getStatus(), f.getGrade());
 				})
 				.toList();
@@ -138,17 +165,18 @@ public class FragmentService {
 		if (!currentMaySee(fragment)) {
 			throw new DEIException(ErrorMessage.NO_SUCH_FRAGMENT, Long.toString(id));
 		}
-		populateStatusAndGrade(fragment);
+		populateStatusAndGrade(fragment, SecurityUtils.currentPerson());
 		return new FragmentDto(fragment, fragment.getStatus(), fragment.getGrade());
 	}
 
 	@Transactional
 	public List<FragmentDto> listByExam(long examId) {
+		Person current = SecurityUtils.currentPerson();
 		List<Fragment> fragments = fragmentRepository.findByExamId(examId);
 		return fragments.stream()
 				.filter(this::currentMaySee)
 				.map(f -> {
-					populateStatusAndGrade(f);
+					populateStatusAndGrade(f, current);
 					return new FragmentDto(f, f.getStatus(), f.getGrade());
 				})
 				.toList();

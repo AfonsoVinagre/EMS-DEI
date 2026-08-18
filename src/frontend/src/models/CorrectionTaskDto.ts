@@ -12,6 +12,7 @@ export default class CorrectionTaskDto {
   grade?: number | null
   assignedAt?: string
   submittedAt?: string | null
+  revisionJustification?: string | null
 
   constructor(obj?: Partial<CorrectionTaskDto>) {
     Object.assign(this, obj)

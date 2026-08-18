@@ -24,6 +24,8 @@ import pt.ulisboa.tecnico.rnl.dei.ems.fragment.repository.FragmentRepository;
 import pt.ulisboa.tecnico.rnl.dei.ems.person.domain.Person;
 import pt.ulisboa.tecnico.rnl.dei.ems.person.domain.Person.PersonType;
 import pt.ulisboa.tecnico.rnl.dei.ems.person.repository.PersonRepository;
+import pt.ulisboa.tecnico.rnl.dei.ems.revision.domain.RevisionItem;
+import pt.ulisboa.tecnico.rnl.dei.ems.revision.repository.RevisionItemRepository;
 import pt.ulisboa.tecnico.rnl.dei.ems.security.SecurityUtils;
 
 @Service
@@ -42,6 +44,26 @@ public class CorrectionService {
 	@Autowired
 	private PersonRepository personRepository;
 
+	@Autowired
+	private RevisionItemRepository revisionItemRepository;
+
+	/**
+	 * Builds the {@link CorrectionTaskDto} for a task. For {@code REVISION}
+	 * tasks, attaches the student's justification (read-only) fetched from the
+	 * matching {@link RevisionItem} so the revising teacher can evaluate it.
+	 * PRIMARY tasks get {@code null}.
+	 */
+	private CorrectionTaskDto toDto(CorrectionTask task) {
+		String justification = null;
+		if (task.getPhase() == CorrectionTask.Phase.REVISION) {
+			justification = revisionItemRepository.findByFragmentId(task.getFragment().getId()).stream()
+					.map(RevisionItem::getJustification)
+					.findFirst()
+					.orElse(null);
+		}
+		return new CorrectionTaskDto(task, justification);
+	}
+
 	private boolean canSeeAllTasks(Person current) {
 		return current != null && (current.getType() == PersonType.ADMINISTRATOR
 				|| current.getType() == PersonType.SCHOOL_STAFF);
@@ -56,7 +78,7 @@ public class CorrectionService {
 		List<CorrectionTask> tasks = canSeeAllTasks(current)
 				? correctionTaskRepository.findAll()
 				: correctionTaskRepository.findByTeacherId(current.getId());
-		return tasks.stream().map(CorrectionTaskDto::new).toList();
+		return tasks.stream().map(this::toDto).toList();
 	}
 
 	@Transactional
@@ -70,7 +92,7 @@ public class CorrectionService {
 		if (!canSeeAllTasks(current) && !task.getTeacher().getId().equals(current.getId())) {
 			throw new DEIException(ErrorMessage.NO_SUCH_CORRECTION_TASK, Long.toString(id));
 		}
-		return new CorrectionTaskDto(task);
+		return toDto(task);
 	}
 
 	@Transactional
@@ -92,7 +114,7 @@ public class CorrectionService {
 					.filter(t -> t.getTeacher().getId().equals(current.getId()))
 					.toList();
 		}
-		return tasks.stream().map(CorrectionTaskDto::new).toList();
+		return tasks.stream().map(this::toDto).toList();
 	}
 
 	/**
@@ -128,7 +150,7 @@ public class CorrectionService {
 		// corrected — i.e. every fragment has at least one SUBMITTED task —
 		// and if so advance the exam from DISTRIBUTED to CORRECTED.
 		maybeMarkExamCorrected(task);
-		return new CorrectionTaskDto(task);
+		return toDto(task);
 	}
 
 	/**
@@ -186,6 +208,6 @@ public class CorrectionService {
 		task.setTeacher(newTeacher);
 		task.setStatus(Status.ASSIGNED);
 		correctionTaskRepository.save(task);
-		return new CorrectionTaskDto(task);
+		return toDto(task);
 	}
 }

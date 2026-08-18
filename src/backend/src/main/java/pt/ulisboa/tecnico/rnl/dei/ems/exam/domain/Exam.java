@@ -1,5 +1,7 @@
 package pt.ulisboa.tecnico.rnl.dei.ems.exam.domain;
 
+import java.time.Instant;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -55,6 +57,23 @@ public class Exam {
 	@Column(name = "status", nullable = false)
 	@Enumerated(EnumType.STRING)
 	private ExamStatus status;
+
+	/**
+	 * When the exam transitioned to {@link ExamStatus#RELEASED} — i.e. when the
+	 * notes were made available to the student. This is the start of the
+	 * per-exam revision window (Fase 5): the student has {@code windowHours} from
+	 * this instant to file revision requests. Null before release.
+	 */
+	@Column(name = "released_at")
+	private Instant releasedAt;
+
+	/**
+	 * One-way marker: {@code true} once this exam's revision window has been
+	 * closed and its target fragments redistributed (or marked closed with no
+	 * requests). Set automatically by the revision scheduler; never reset.
+	 */
+	@Column(name = "revision_distributed", nullable = false)
+	private boolean revisionDistributed = false;
 
 	protected Exam() {
 	}

@@ -19,9 +19,24 @@ public record CorrectionTaskDto(
 		Status status,
 		Double grade,
 		Instant assignedAt,
-		Instant submittedAt) {
+		Instant submittedAt,
+		String revisionJustification) {
 
+	/**
+	 * Builds the DTO without a revision justification (PRIMARY tasks, or any
+	 * caller that does not need to surface the student's justification).
+	 */
 	public CorrectionTaskDto(CorrectionTask task) {
+		this(task, null);
+	}
+
+	/**
+	 * Builds the DTO, optionally attaching the student's revision justification.
+	 * Only meaningful for {@code REVISION} tasks: the justification is fetched
+	 * from the matching {@code RevisionItem} and exposed read-only to the
+	 * revising teacher. Never persisted on the task itself.
+	 */
+	public CorrectionTaskDto(CorrectionTask task, String revisionJustification) {
 		this(
 				task.getId(),
 				task.getFragment().getId(),
@@ -35,6 +50,7 @@ public record CorrectionTaskDto(
 				task.getStatus(),
 				task.getGrade(),
 				task.getAssignedAt(),
-				task.getSubmittedAt());
+				task.getSubmittedAt(),
+				revisionJustification);
 	}
 }

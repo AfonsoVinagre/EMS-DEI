@@ -11,6 +11,9 @@ export default class ExamDto {
   originalFilename?: string
   status?: string
   grade?: number | null
+  releasedAt?: string | null
+  revisionDeadline?: string | null
+  revisionDistributed?: boolean
 
   constructor(obj?: Partial<ExamDto>) {
     Object.assign(this, obj)

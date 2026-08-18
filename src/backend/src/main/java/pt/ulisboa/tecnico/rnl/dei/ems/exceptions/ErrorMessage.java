@@ -60,7 +60,12 @@ public enum ErrorMessage {
 	CONSULTATION_REQUEST_NOT_PENDING("O pedido de consulta já foi decidido.", 6002),
 	EXAM_NOT_CORRECTED("O exame ainda não está totalmente corrigido.", 6003),
 	CONSULTATION_REQUEST_ALREADY_PENDING("Já existe um pedido de consulta pendente para este exame.", 6004),
-	EXAM_ALREADY_RELEASED("O exame já foi disponibilizado.", 6005);
+	EXAM_ALREADY_RELEASED("O exame já foi disponibilizado.", 6005),
+
+	NO_SUCH_REVISION_REQUEST("Não existe nenhum pedido de revisão com o ID %s", 7001),
+	REVISION_WINDOW_CLOSED("O prazo para pedir revisão deste exame já terminou ou a revisão já foi processada.", 7002),
+	REVISION_REQUEST_ALREADY_EXISTS("Já existe um pedido de revisão pendente para este exame.", 7003),
+	REVISION_ITEM_INVALID("Cada pergunta do pedido de revisão tem de pertencer ao exame e ter uma justificação.", 7004);
 
 	private final String label;
 	private final int code;

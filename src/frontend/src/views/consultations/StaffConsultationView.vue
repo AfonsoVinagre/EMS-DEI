@@ -101,11 +101,39 @@
       {{ statusLabel(item.status) }}
     </template>
   </v-data-table>
+
+  <!-- Pedidos de revisão (Fase 5) — histórico read-only por escola. As
+       decisões em si (notas definitivas) estão nos tasks de revisão, visíveis
+       na vista de classificações. -->
+  <h3 class="text-left mt-6 mb-2">Pedidos de revisão</h3>
+  <v-data-table
+    :headers="revisionHeaders"
+    :items="revisionRequests"
+    :loading="loadingRevisions"
+    item-key="id"
+    class="text-left"
+    no-data-text="Sem pedidos de revisão."
+  >
+    <template v-slot:bottom></template>
+    <template v-slot:[`item.questions`]="{ item }">
+      {{ item.items?.length ?? 0 }}
+    </template>
+    <template v-slot:[`item.revisionState`]="{ item }">
+      <v-chip
+        :color="revisionStateColor(item)"
+        :text="revisionStateLabel(item)"
+        size="small"
+        variant="tonal"
+      ></v-chip>
+    </template>
+  </v-data-table>
 </template>
 
 <script setup lang="ts">
 import type SubjectDto from '@/models/SubjectDto'
 import type ConsultationRequestDto from '@/models/ConsultationRequestDto'
+import type ExamDto from '@/models/ExamDto'
+import type RevisionRequestDto from '@/models/RevisionRequestDto'
 import RemoteService from '@/services/RemoteService'
 import { computed, ref } from 'vue'
 
@@ -120,6 +148,39 @@ const bulkBusy = ref(false)
 const bulkResult = ref<number | null>(null)
 
 const busyId = ref<number | null>(null)
+
+// --- Pedidos de revisão (Fase 5) ---
+const revisionRequests = ref<RevisionRequestDto[]>([])
+const exams = ref<ExamDto[]>([])
+const loadingRevisions = ref(true)
+
+const revisionHeaders = [
+  { title: 'Aluno', key: 'studentName', value: 'studentName', sortable: true },
+  { title: 'Disciplina', key: 'subjectName', value: 'subjectName', sortable: true },
+  { title: 'Nº perguntas', key: 'questions', value: 'questions', sortable: true },
+  { title: 'Estado da revisão', key: 'revisionState', value: 'revisionState', sortable: false }
+]
+
+function examFor(request: RevisionRequestDto): ExamDto | undefined {
+  return exams.value.find((e) => e.id === request.examId)
+}
+
+function revisionStateLabel(request: RevisionRequestDto): string {
+  const exam = examFor(request)
+  if (exam?.revisionDistributed) return 'Concluída'
+  const deadline = exam?.revisionDeadline ? Date.parse(exam.revisionDeadline) : null
+  if (deadline == null) return '—'
+  if (Date.now() >= deadline) return 'Em distribuição'
+  return `Janela aberta até ${new Date(deadline).toLocaleString('pt-PT')}`
+}
+
+function revisionStateColor(request: RevisionRequestDto): string {
+  const exam = examFor(request)
+  if (exam?.revisionDistributed) return 'success'
+  const deadline = exam?.revisionDeadline ? Date.parse(exam.revisionDeadline) : null
+  if (deadline == null) return 'grey'
+  return Date.now() >= deadline ? 'warning' : 'success'
+}
 
 const pendingHeaders = [
   { title: 'Aluno', key: 'studentName', value: 'studentName', sortable: true },
@@ -169,6 +230,24 @@ async function refresh() {
   }
 })()
 refresh()
+refreshRevisions()
+
+async function refreshRevisions() {
+  loadingRevisions.value = true
+  try {
+    const [revs, allExams] = await Promise.all([
+      RemoteService.getRevisionRequests(),
+      RemoteService.getExams()
+    ])
+    revisionRequests.value = revs
+    exams.value = allExams
+  } catch {
+    revisionRequests.value = []
+    exams.value = []
+  } finally {
+    loadingRevisions.value = false
+  }
+}
 
 async function approve(id: number | undefined) {
   if (id == null) return
@@ -204,6 +283,7 @@ async function onBulkRelease() {
     const ids = await RemoteService.bulkReleaseExams(bulkSubjectId.value)
     bulkResult.value = ids.length
     await refresh()
+    await refreshRevisions()
   } catch {
     bulkResult.value = null
   } finally {

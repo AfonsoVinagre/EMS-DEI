@@ -12,6 +12,7 @@ import type ExamDto from '@/models/ExamDto'
 import type FragmentDto from '@/models/FragmentDto'
 import type CorrectionTaskDto from '@/models/CorrectionTaskDto'
 import type ConsultationRequestDto from '@/models/ConsultationRequestDto'
+import type RevisionRequestDto from '@/models/RevisionRequestDto'
 import type SystemStateDto from '@/models/SystemStateDto'
 
 const httpClient = axios.create()
@@ -142,6 +143,22 @@ export default class RemoteServices {
 
   static async rejectConsultationRequest(id: number): Promise<ConsultationRequestDto> {
     return httpClient.post(`/consultation-requests/${id}/reject`)
+  }
+
+  // --- Revision requests (Fase 5) ---
+  static async createRevisionRequest(
+    examId: number,
+    items: { fragmentId: number; justification: string }[]
+  ): Promise<RevisionRequestDto> {
+    return httpClient.post('/revision-requests', { examId, items })
+  }
+
+  static async getMyRevisionRequests(): Promise<RevisionRequestDto[]> {
+    return httpClient.get('/revision-requests/mine')
+  }
+
+  static async getRevisionRequests(): Promise<RevisionRequestDto[]> {
+    return httpClient.get('/revision-requests')
   }
 
   // --- Fragments ---

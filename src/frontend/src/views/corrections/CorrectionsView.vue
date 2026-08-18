@@ -60,10 +60,26 @@
         <v-divider class="my-4"></v-divider>
 
         <div v-if="existingTask" class="text-left">
+          <!-- Revisão (Fase 5): the student's justification is surfaced
+               read-only so the revising teacher can evaluate it. -->
+          <v-alert
+            v-if="existingTask.phase === 'REVISION' && existingTask.revisionJustification"
+            type="info" variant="tonal" class="mb-3"
+            title="Revisão — avalie a justificação"
+          >
+            <div class="text-body-2">
+              <strong>Justificação do aluno:</strong>
+              {{ existingTask.revisionJustification }}
+            </div>
+          </v-alert>
+
           <p class="text-medium-emphasis mb-2">
             <strong v-if="existingTask.status === 'SUBMITTED'">
               Já atribuiu a nota
               <span class="text-success">{{ existingTask.grade }}</span>.
+            </strong>
+            <strong v-else-if="existingTask.phase === 'REVISION'">
+              Atribua a nota definitiva para esta pergunta (revisão).
             </strong>
             <strong v-else>
               Atribua a nota para esta pergunta.
@@ -86,7 +102,9 @@
                 prepend-icon="mdi-check"
                 :loading="submitting"
                 :disabled="!canSubmit"
-                :text="existingTask.status === 'SUBMITTED' ? 'Submetido' : 'Avaliar'"
+                :text="existingTask.status === 'SUBMITTED'
+                  ? 'Submetido'
+                  : (existingTask.phase === 'REVISION' ? 'Avaliar revisão' : 'Avaliar')"
                 @click="submitGrade"
               ></v-btn>
             </v-col>
@@ -218,10 +236,14 @@ async function submitGrade() {
     if (selected.value) {
       const idx = fragments.value.findIndex((x) => x.id === selected.value!.id)
       if (idx >= 0) {
-        // @Transient — recompute locally from the updated task.
+        // @Transient — recompute locally from the updated task. A revision
+        // submission is REVISION_SUBMITTED, a primary one is CORRECTED.
+        const newStatus = updated.status === 'SUBMITTED'
+          ? (updated.phase === 'REVISION' ? 'REVISION_SUBMITTED' : 'CORRECTED')
+          : 'IN_CORRECTION'
         fragments.value[idx] = {
           ...fragments.value[idx],
-          status: updated.status === 'SUBMITTED' ? 'CORRECTED' : 'IN_CORRECTION'
+          status: newStatus
         }
       }
     }

@@ -6,10 +6,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import javax.imageio.ImageIO;
 
@@ -76,6 +80,14 @@ public class ExamService {
 
 	@Value("${ems.storage.fragments-dir:./data/fragments}")
 	private String fragmentsDir;
+
+	/**
+	 * Length (in hours) of the per-exam revision window that opens when an exam
+	 * is released (Fase 5). The deadline exposed on {@link ExamDto} is
+	 * {@code releasedAt + revisionWindowHours}.
+	 */
+	@Value("${ems.revision.window-hours:48}")
+	private long revisionWindowHours;
 
 	private static final Random RNG = new Random();
 
@@ -181,7 +193,7 @@ public class ExamService {
 		// separate step (and so the "lock uploads" guard does not depend
 		// on a batch operation they could forget to run).
 		segmentInternal(exam);
-		return new ExamDto(exam);
+		return examDto(exam, null);
 	}
 
 	/**
@@ -212,7 +224,7 @@ public class ExamService {
 		Exam exam = examRepository.save(
 				new Exam(pdfPath, originalFilename, student, school, subject, uploadedBy));
 		segmentInternal(exam);
-		return new ExamDto(exam);
+		return examDto(exam, null);
 	}
 
 	@Transactional
@@ -238,7 +250,7 @@ public class ExamService {
 			// Don't reveal that another student's exam exists.
 			throw new DEIException(ErrorMessage.NO_SUCH_EXAM, Long.toString(id));
 		}
-		return new ExamDto(exam, grade);
+		return examDto(exam, grade);
 	}
 
 	/**
@@ -259,7 +271,7 @@ public class ExamService {
 	@Transactional
 	public List<ExamDto> listAll() {
 		return examRepository.findAll().stream()
-				.map(exam -> new ExamDto(exam, totalGrade(exam)))
+				.map(exam -> examDto(exam, totalGrade(exam)))
 				.toList();
 	}
 
@@ -279,12 +291,12 @@ public class ExamService {
 				throw new DEIException(ErrorMessage.PERSON_SCHOOL_REQUIRED);
 			}
 			return examRepository.findBySchoolId(current.getSchool().getId()).stream()
-					.map(exam -> new ExamDto(exam, totalGrade(exam)))
+					.map(exam -> examDto(exam, totalGrade(exam)))
 					.toList();
 		}
 		if (current.getType() == PersonType.STUDENT) {
 			return examRepository.findByStudentId(current.getId()).stream()
-					.map(exam -> new ExamDto(exam, studentGrade(exam)))
+					.map(exam -> examDto(exam, studentGrade(exam)))
 					.toList();
 		}
 		return listAll();
@@ -293,14 +305,14 @@ public class ExamService {
 	@Transactional
 	public List<ExamDto> listByStudent(long studentId) {
 		return examRepository.findByStudentId(studentId).stream()
-				.map(exam -> new ExamDto(exam, totalGrade(exam)))
+				.map(exam -> examDto(exam, totalGrade(exam)))
 				.toList();
 	}
 
 	@Transactional
 	public List<ExamDto> listBySchoolAndSubject(long schoolId, long subjectId) {
 		return examRepository.findBySchoolIdAndSubjectId(schoolId, subjectId).stream()
-				.map(exam -> new ExamDto(exam, totalGrade(exam)))
+				.map(exam -> examDto(exam, totalGrade(exam)))
 				.toList();
 	}
 
@@ -417,22 +429,93 @@ public class ExamService {
 	}
 
 	/**
-	 * Sum of the grades of every corrected (SUBMITTED) fragment of an exam.
-	 * Returns {@code null} unless the exam is fully corrected — i.e. its
-	 * status is {@link Exam.ExamStatus#CORRECTED} or {@link Exam.ExamStatus#RELEASED}:
-	 * before that the total is not meaningful and the UI renders "--".
+	 * Sum of the <em>definitive</em> grade of every fragment of an exam. The
+	 * definitive grade of a fragment is the grade of its {@code REVISION} task
+	 * if that has been submitted, otherwise the grade of its {@code PRIMARY}
+	 * task. Returns {@code null} unless the exam is fully corrected — i.e. its
+	 * status is {@link Exam.ExamStatus#CORRECTED} or {@link
+	 * Exam.ExamStatus#RELEASED}: before that the total is not meaningful and the
+	 * UI renders "--".
+	 *
+	 * <p>Grouping per fragment (rather than summing every SUBMITTED task) avoids
+	 * double-counting once a revisão creates a second SUBMITTED task on a
+	 * fragment that already had its PRIMARY submitted.
 	 */
 	private Double totalGrade(Exam exam) {
 		if (exam.getStatus() != Exam.ExamStatus.CORRECTED
 				&& exam.getStatus() != Exam.ExamStatus.RELEASED) {
 			return null;
 		}
-		return correctionTaskRepository.findByFragmentExamId(exam.getId()).stream()
-				.filter(t -> t.getStatus() == CorrectionTask.Status.SUBMITTED)
+		List<Fragment> fragments = fragmentRepository.findByExamId(exam.getId());
+		if (fragments.isEmpty()) {
+			return null;
+		}
+		Map<Long, List<CorrectionTask>> tasksByFragment = correctionTaskRepository
+				.findByFragmentExamId(exam.getId()).stream()
+				.collect(Collectors.groupingBy(t -> t.getFragment().getId()));
+		double total = 0;
+		for (Fragment fragment : fragments) {
+			Double definitive = definitiveGrade(
+					tasksByFragment.getOrDefault(fragment.getId(), List.of()));
+			if (definitive == null) {
+				return null;
+			}
+			total += definitive;
+		}
+		return total;
+	}
+
+	/**
+	 * The definitive grade of a fragment: the grade of its submitted
+	 * {@code REVISION} task if any, otherwise the grade of its submitted
+	 * {@code PRIMARY} task. Mirrors {@code FragmentService.computeGrade} (kept
+	 * in sync by design — the fragment-level and exam-level views must agree).
+	 */
+	private Double definitiveGrade(List<CorrectionTask> tasks) {
+		Double revision = tasks.stream()
+				.filter(t -> t.getPhase() == CorrectionTask.Phase.REVISION
+						&& t.getStatus() == CorrectionTask.Status.SUBMITTED)
 				.map(CorrectionTask::getGrade)
 				.filter(java.util.Objects::nonNull)
-				.mapToDouble(Double::doubleValue)
-				.sum();
+				.findFirst()
+				.orElse(null);
+		if (revision != null) {
+			return revision;
+		}
+		return tasks.stream()
+				.filter(t -> t.getPhase() == CorrectionTask.Phase.PRIMARY
+						&& t.getStatus() == CorrectionTask.Status.SUBMITTED)
+				.map(CorrectionTask::getGrade)
+				.filter(java.util.Objects::nonNull)
+				.findFirst()
+				.orElse(null);
+	}
+
+	/**
+	 * Builds the {@link ExamDto} for an exam, exposing the per-exam revision
+	 * window: {@code revisionDeadline = releasedAt + revisionWindowHours} (or
+	 * {@code null} before release). The grade is whatever the caller computed
+	 * (student-gated or the real total).
+	 */
+	private ExamDto examDto(Exam exam, Double grade) {
+		Instant releasedAt = exam.getReleasedAt();
+		Instant deadline = releasedAt != null
+				? releasedAt.plus(revisionWindowHours, ChronoUnit.HOURS)
+				: null;
+		return new ExamDto(exam, grade, releasedAt, deadline, exam.isRevisionDistributed());
+	}
+
+	/**
+	 * Marks an exam as released and stamps {@code releasedAt} — the start of
+	 * the per-exam revision window. Centralised so both the individual approve
+	 * flow and the bulk release stamp the same timestamp.
+	 */
+	private void markReleased(Exam exam) {
+		exam.setStatus(Exam.ExamStatus.RELEASED);
+		if (exam.getReleasedAt() == null) {
+			exam.setReleasedAt(Instant.now());
+		}
+		examRepository.save(exam);
 	}
 
 	/**
@@ -447,8 +530,10 @@ public class ExamService {
 	}
 
 	/**
-	 * Releases a corrected exam: {@code CORRECTED -> RELEASED}. Idempotent for
-	 * an already-released exam; throws if the exam is not yet fully corrected.
+	 * Releases a corrected exam: {@code CORRECTED -> RELEASED}, stamping
+	 * {@code releasedAt} (the start of the per-exam revision window). Idempotent
+	 * for an already-released exam (preserves the original {@code releasedAt});
+	 * throws if the exam is not yet fully corrected.
 	 */
 	@Transactional
 	public void releaseExam(long examId) {
@@ -460,14 +545,14 @@ public class ExamService {
 		if (exam.getStatus() != Exam.ExamStatus.CORRECTED) {
 			throw new DEIException(ErrorMessage.EXAM_NOT_CORRECTED);
 		}
-		exam.setStatus(Exam.ExamStatus.RELEASED);
-		examRepository.save(exam);
+		markReleased(exam);
 	}
 
 	/**
 	 * Bulk release: every CORRECTED exam of the caller's school for the given
-	 * subject transitions to RELEASED. Returns the ids of the released exams
-	 * (the staff UI reports how many were made available).
+	 * subject transitions to RELEASED (stamping {@code releasedAt}). Returns
+	 * the ids of the released exams (the staff UI reports how many were made
+	 * available).
 	 */
 	@Transactional
 	public List<Long> bulkRelease(Person current, long subjectId) {
@@ -477,8 +562,7 @@ public class ExamService {
 		List<Exam> corrected = examRepository.findBySchoolIdAndSubjectIdAndStatus(
 				current.getSchool().getId(), subjectId, Exam.ExamStatus.CORRECTED);
 		for (Exam exam : corrected) {
-			exam.setStatus(Exam.ExamStatus.RELEASED);
-			examRepository.save(exam);
+			markReleased(exam);
 		}
 		return corrected.stream().map(Exam::getId).toList();
 	}
