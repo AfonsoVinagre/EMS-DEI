@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import LoginView from '@/views/LoginView.vue'
+import DashboardView from '@/views/dashboard/DashboardView.vue'
 import PeopleView from '@/views/people/PeopleView.vue'
 import StatisticsView from '@/views/statistics/StatisticsView.vue'
 import SchoolsView from '@/views/schools/SchoolsView.vue'
@@ -36,6 +37,14 @@ const router = createRouter({
       path: '/',
       name: 'home',
       component: HomeView
+    },
+    {
+      // Admin landing: métricas globais agregadas de endpoints existentes
+      // (exames, pedidos de revisão, tarefas, pessoas). Zero backend.
+      path: '/dashboard',
+      name: 'dashboard',
+      component: DashboardView,
+      meta: { allowedRoles: ADMIN_ONLY }
     },
     {
       path: '/people',
@@ -137,6 +146,7 @@ router.beforeEach((to) => {
 
   // School staff and teachers each have their own landing page.
   if (to.name === 'home') {
+    if (auth.user?.role === 'ADMINISTRATOR') return { name: 'dashboard' }
     if (auth.user?.role === 'SCHOOL_STAFF') return { name: 'exams' }
     if (auth.user?.role === 'TEACHER') return { name: 'corrections' }
     if (auth.user?.role === 'STUDENT') return { name: 'my-exams' }

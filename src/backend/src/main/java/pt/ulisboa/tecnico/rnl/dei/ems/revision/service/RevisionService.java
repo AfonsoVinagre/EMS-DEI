@@ -156,8 +156,17 @@ public class RevisionService {
 
 	@Transactional
 	public List<RevisionRequestDto> listForStaff(Person current) {
-		if (current == null || current.getType() != PersonType.SCHOOL_STAFF
-				|| current.getSchool() == null) {
+		if (current == null) {
+			throw new DEIException(ErrorMessage.ACCESS_DENIED);
+		}
+		// Administrators see every revision request (dashboard estatístico);
+		// school staff see only their own school's requests.
+		if (current.getType() == PersonType.ADMINISTRATOR) {
+			return revisionRequestRepository.findAll().stream()
+					.map(RevisionRequestDto::new)
+					.toList();
+		}
+		if (current.getType() != PersonType.SCHOOL_STAFF || current.getSchool() == null) {
 			throw new DEIException(ErrorMessage.ACCESS_DENIED);
 		}
 		return revisionRequestRepository.findByExamSchoolId(current.getSchool().getId()).stream()
