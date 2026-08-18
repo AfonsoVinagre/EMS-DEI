@@ -3,7 +3,10 @@
 
   <!-- Bulk Release por disciplina -->
   <v-card variant="outlined" class="mb-6 text-left">
-    <v-card-title class="text-subtitle-1">Bulk Release</v-card-title>
+    <v-card-title class="text-subtitle-1">
+      <v-icon icon="mdi-broadcast" class="mr-2" />
+      Disponibilização em lote
+    </v-card-title>
     <v-card-text>
       <p class="text-medium-emphasis mb-3">
         Disponibiliza em lote as provas já corrigidas de uma disciplina da sua
@@ -20,6 +23,7 @@
             item-value="id"
             label="Disciplina"
             clearable
+            density="comfortable"
           ></v-select>
         </v-col>
         <v-col cols="auto" class="d-flex align-center">
@@ -49,84 +53,121 @@
   </v-card>
 
   <!-- Pedidos de consulta pendentes -->
-  <h3 class="text-left mb-2">Pedidos de consulta</h3>
-  <v-data-table
-    :headers="pendingHeaders"
-    :items="pending"
-    :loading="loading"
-    item-key="id"
-    class="text-left"
-    no-data-text="Não há pedidos pendentes."
-  >
-    <template v-slot:[`item.status`]="{ item }">
-      {{ statusLabel(item.status) }}
-    </template>
-    <template v-slot:[`item.actions`]="{ item }">
-      <v-btn
-        color="success"
-        size="small"
-        variant="tonal"
-        prepend-icon="mdi-check"
-        :loading="busyId === item.id"
-        :disabled="busyId === item.id"
-        text="Aprovar"
-        @click="approve(item.id)"
-      ></v-btn>
-      <v-btn
-        class="ml-2"
-        color="error"
-        size="small"
-        variant="tonal"
-        prepend-icon="mdi-close"
-        :loading="busyId === item.id"
-        :disabled="busyId === item.id"
-        text="Rejeitar"
-        @click="reject(item.id)"
-      ></v-btn>
-    </template>
-  </v-data-table>
+  <v-card variant="outlined" class="mb-6 text-left">
+    <v-card-title class="text-subtitle-1 d-flex align-center">
+      <v-icon icon="mdi-email-outline" class="mr-2" />
+      Pedidos de consulta
+      <v-chip size="x-small" variant="flat" color="warning" class="ml-2">
+        {{ pending.length }}
+      </v-chip>
+    </v-card-title>
+    <v-card-text>
+      <v-data-table
+        :headers="pendingHeaders"
+        :items="pending"
+        :loading="loading"
+        item-key="id"
+        density="comfortable"
+        class="text-left"
+        no-data-text="Não há pedidos pendentes."
+      >
+        <template v-slot:[`item.status`]="{ item }">
+          <v-chip
+            :color="consultationStatusColor(item.status)"
+            :text="consultationStatusLabel(item.status)"
+            size="small"
+            variant="tonal"
+          ></v-chip>
+        </template>
+        <template v-slot:[`item.actions`]="{ item }">
+          <v-btn
+            color="success"
+            size="small"
+            variant="tonal"
+            prepend-icon="mdi-check"
+            :loading="busyId === item.id"
+            :disabled="busyId === item.id"
+            text="Aprovar"
+            @click="approve(item.id)"
+          ></v-btn>
+          <v-btn
+            class="ml-2"
+            color="error"
+            size="small"
+            variant="tonal"
+            prepend-icon="mdi-close"
+            :loading="busyId === item.id"
+            :disabled="busyId === item.id"
+            text="Rejeitar"
+            @click="reject(item.id)"
+          ></v-btn>
+        </template>
+      </v-data-table>
+    </v-card-text>
+  </v-card>
 
   <!-- Histórico de decisões -->
-  <h3 class="text-left mt-6 mb-2">Histórico</h3>
-  <v-data-table
-    :headers="historyHeaders"
-    :items="history"
-    :loading="loading"
-    item-key="id"
-    class="text-left"
-    no-data-text="Sem histórico."
-  >
-    <template v-slot:bottom></template>
-    <template v-slot:[`item.status`]="{ item }">
-      {{ statusLabel(item.status) }}
-    </template>
-  </v-data-table>
+  <v-card variant="outlined" class="mb-6 text-left">
+    <v-card-title class="text-subtitle-1">
+      <v-icon icon="mdi-history" class="mr-2" />
+      Histórico de Pedidos de Consulta
+    </v-card-title>
+    <v-card-text>
+      <v-data-table
+        :headers="historyHeaders"
+        :items="history"
+        :loading="loading"
+        item-key="id"
+        density="comfortable"
+        class="text-left"
+        no-data-text="Sem histórico."
+      >
+        <template v-slot:bottom></template>
+        <template v-slot:[`item.status`]="{ item }">
+          <v-chip
+            :color="consultationStatusColor(item.status)"
+            :text="consultationStatusLabel(item.status)"
+            size="small"
+            variant="tonal"
+          ></v-chip>
+        </template>
+      </v-data-table>
+    </v-card-text>
+  </v-card>
 
   <!-- Pedidos de revisão (Fase 5) — histórico read-only por escola. As
        decisões em si (notas definitivas) estão nos tasks de revisão, visíveis
        na vista de classificações. -->
-  <h3 class="text-left mt-6 mb-2">Pedidos de revisão</h3>
-  <v-data-table
-    :headers="revisionHeaders"
-    :items="revisionRequests"
-    :loading="loadingRevisions"
-    item-key="id"
-    class="text-left"
-    no-data-text="Sem pedidos de revisão."
-  >
-    <template v-slot:bottom></template>
-    <template v-slot:[`item.questions`]="{ item }">
-      {{ item.items?.length ?? 0 }}
-    </template>
-    <template v-slot:[`item.revisionState`]="{ item }">
-      <v-chip
-        :color="revisionStateColor(item)"
-        :text="revisionStateLabel(item)"
-        size="small"
-        variant="tonal"
-      ></v-chip>
-    </template>
-  </v-data-table>
+  <v-card variant="outlined" class="text-left">
+    <v-card-title class="text-subtitle-1">
+      <v-icon icon="mdi-file-edit-outline" class="mr-2" />
+      Pedidos de revisão
+    </v-card-title>
+    <v-card-text>
+      <v-data-table
+        :headers="revisionHeaders"
+        :items="revisionRequests"
+        :loading="loadingRevisions"
+        item-key="id"
+        density="comfortable"
+        class="text-left"
+        no-data-text="Sem pedidos de revisão."
+      >
+        <template v-slot:bottom></template>
+        <template v-slot:[`item.questions`]="{ item }">
+          {{ item.items?.length ?? 0 }}
+        </template>
+        <template v-slot:[`item.revisionState`]="{ item }">
+          <v-chip
+            :color="revisionStateColor(item)"
+            :text="revisionStateLabel(item)"
+            size="small"
+            variant="tonal"
+          ></v-chip>
+        </template>
+      </v-data-table>
+    </v-card-text>
+  </v-card>
 </template>
 
 <script setup lang="ts">
@@ -136,6 +177,7 @@ import type ExamDto from '@/models/ExamDto'
 import type RevisionRequestDto from '@/models/RevisionRequestDto'
 import RemoteService from '@/services/RemoteService'
 import { computed, ref } from 'vue'
+import { consultationStatusLabel, consultationStatusColor } from '@/utils/labels'
 
 const requests = ref<ConsultationRequestDto[]>([])
 const loading = ref(true)
@@ -203,15 +245,6 @@ const history = computed(() =>
     .slice()
     .sort((a, b) => (b.decidedAt ?? '').localeCompare(a.decidedAt ?? ''))
 )
-
-function statusLabel(status: string | undefined): string {
-  switch (status) {
-    case 'PENDING': return 'Pendente'
-    case 'APPROVED': return 'Aprovado'
-    case 'REJECTED': return 'Rejeitado'
-    default: return status ?? ''
-  }
-}
 
 async function refresh() {
   loading.value = true

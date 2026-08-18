@@ -8,7 +8,7 @@
     v-if="systemState?.examsLocked && !systemState?.distributed && (auth.user?.role === 'SCHOOL_STAFF' || isAdminView)"
     type="warning"
     variant="tonal"
-    class="mb-4"
+    class="mb-4 text-left"
   >
     Os uploads estão actualmente <strong>bloqueados</strong> a nível global.
     Nenhum staff pode submeter novos exames.
@@ -18,53 +18,94 @@
        them, because then auth.user.role swaps to SCHOOL_STAFF). School is
        forced server-side from the staff's own school, so it is not picked
        here. -->
-  <v-row v-if="canUpload">
-    <v-col cols="12" md="6">
-      <v-file-input
-        v-model="pdfFile"
-        label="PDF do exame"
-        accept="application/pdf"
-        prepend-inner-icon="mdi-file-pdf-box"
-        variant="outlined"
-        density="comfortable"
-        :rules="[(v: File | File[] | undefined) => !v || (Array.isArray(v) ? v.length > 0 : true) || 'PDF obrigatório']"
-      ></v-file-input>
-    </v-col>
-    <v-col cols="12" md="6">
-      <v-select
-        v-model="newStudentId"
-        :items="students"
-        :loading="loadingStudents"
-        item-title="name"
-        item-value="id"
-        label="Aluno"
-        clearable
-      ></v-select>
-    </v-col>
-    <v-col cols="12" md="6">
-      <v-select
-        v-model="newSubjectId"
-        :items="subjects"
-        :loading="loadingSubjects"
-        item-title="name"
-        item-value="id"
-        label="Disciplina"
-        clearable
-      ></v-select>
-    </v-col>
-    <v-col cols="auto" class="d-flex align-center">
-      <v-btn
-        color="primary"
-        prepend-icon="mdi-upload"
-        :text="submitting ? 'A submeter…' : 'Submeter'"
-        :loading="submitting"
-        :disabled="!canSubmitForm || uploadsDisabled"
-        @click="uploadExam"
-      ></v-btn>
-    </v-col>
-  </v-row>
+  <v-card v-if="canUpload" variant="outlined" class="mb-4 text-left">
+    <v-card-title class="text-subtitle-1">
+      <v-icon icon="mdi-upload" class="mr-2" />
+      Submeter novo exame
+    </v-card-title>
+    <v-card-text>
+      <v-row>
+        <v-col cols="12" md="6">
+          <v-file-input
+            v-model="pdfFile"
+            label="PDF do exame"
+            accept="application/pdf"
+            prepend-inner-icon="mdi-file-pdf-box"
+            variant="outlined"
+            density="comfortable"
+            :rules="[(v: File | File[] | undefined) => !v || (Array.isArray(v) ? v.length > 0 : true) || 'PDF obrigatório']"
+          ></v-file-input>
+        </v-col>
+        <v-col cols="12" md="6">
+          <v-select
+            v-model="newStudentId"
+            :items="students"
+            :loading="loadingStudents"
+            item-title="name"
+            item-value="id"
+            label="Aluno"
+            clearable
+            density="comfortable"
+          ></v-select>
+        </v-col>
+        <v-col cols="12" md="6">
+          <v-select
+            v-model="newSubjectId"
+            :items="subjects"
+            :loading="loadingSubjects"
+            item-title="name"
+            item-value="id"
+            label="Disciplina"
+            clearable
+            density="comfortable"
+          ></v-select>
+        </v-col>
+        <v-col cols="auto" class="d-flex align-center">
+          <v-btn
+            color="primary"
+            prepend-icon="mdi-upload"
+            :text="submitting ? 'A submeter…' : 'Submeter'"
+            :loading="submitting"
+            :disabled="!canSubmitForm || uploadsDisabled"
+            @click="uploadExam"
+          ></v-btn>
+        </v-col>
+      </v-row>
+    </v-card-text>
+  </v-card>
 
-  <v-row>
+  <!-- Global action bar: lock/unlock uploads (admin-only) and distribute
+       uploaded exams (admin-only, only available once the system is locked).
+       Once exams have been distributed, the unlock button disappears — the
+       lock is permanent at that point. -->
+  <div
+    v-if="canControlUploads || canDistribute"
+    class="d-flex flex-wrap ga-2 mb-4"
+  >
+    <v-btn
+      v-if="canControlUploads && !systemState?.distributed"
+      :color="systemState?.examsLocked ? 'warning' : 'primary'"
+      :prepend-icon="systemState?.examsLocked ? 'mdi-lock-open-variant' : 'mdi-lock'"
+      :loading="busy"
+      :disabled="busy"
+      :text="systemState?.examsLocked ? 'Desbloquear Exames' : 'Bloquear Exames'"
+      @click="onToggleLock"
+    ></v-btn>
+    <v-btn
+      v-if="canDistribute && !systemState?.distributed"
+      color="primary"
+      prepend-icon="mdi-account-multiple-plus-outline"
+      :loading="distributing"
+      :disabled="distributing || uploadedCount === 0 || !systemState?.examsLocked"
+      :title="!systemState?.examsLocked
+        ? 'Bloqueie os exames antes de distribuir'
+        : ''"
+      :text="`Distribuir Exames (${uploadedCount})`"
+      @click="onDistributeAll"
+    ></v-btn>
+  </div>
+
+  <v-row class="mb-2">
     <v-col v-if="canFilterSchool" cols="12" md="6">
       <v-select
         v-model="filterSchoolId"
@@ -74,50 +115,39 @@
         item-value="id"
         label="Filtrar por escola"
         clearable
+        density="comfortable"
       ></v-select>
     </v-col>
-  </v-row>
-
-  <!-- Global action bar: lock/unlock uploads (admin-only) and distribute
-       uploaded exams (admin-only, only available once the system is locked).
-       Once exams have been distributed, the unlock button disappears — the
-       lock is permanent at that point. -->
-  <v-row class="mb-2">
-    <v-col cols="auto">
-      <v-btn
-        v-if="canControlUploads && !systemState?.distributed"
-        :color="systemState?.examsLocked ? 'warning' : 'primary'"
-        :prepend-icon="systemState?.examsLocked ? 'mdi-lock-open-variant' : 'mdi-lock'"
-        :loading="busy"
-        :disabled="busy"
-        :text="systemState?.examsLocked ? 'Desbloquear Exames' : 'Bloquear Exames'"
-        @click="onToggleLock"
-      ></v-btn>
-    </v-col>
-    <v-col cols="auto">
-      <v-btn
-        v-if="canDistribute && !systemState?.distributed"
-        color="primary"
-        prepend-icon="mdi-account-multiple-plus-outline"
-        :loading="distributing"
-        :disabled="distributing || uploadedCount === 0 || !systemState?.examsLocked"
-        :title="!systemState?.examsLocked
-          ? 'Bloqueie os exames antes de distribuir'
-          : ''"
-        :text="`Distribuir Exames (${uploadedCount})`"
-        @click="onDistributeAll"
-      ></v-btn>
+    <v-col cols="12" md="6">
+      <v-text-field
+        v-model="search"
+        label="Pesquisar (aluno, ficheiro, disciplina…)"
+        prepend-inner-icon="mdi-magnify"
+        variant="outlined"
+        density="comfortable"
+        hide-details
+        single-line
+      ></v-text-field>
     </v-col>
   </v-row>
 
   <v-data-table
     :headers="headers"
-    :items="filteredExams"
+    :items="sortedExams"
     :loading="loadingExams"
     item-key="id"
+    density="comfortable"
     class="text-left"
     no-data-text="Sem exames a apresentar."
   >
+    <template v-slot:[`item.status`]="{ item }">
+      <v-chip
+        :color="examStatusColor(item.status)"
+        :text="examStatusLabel(item.status)"
+        size="small"
+        variant="tonal"
+      ></v-chip>
+    </template>
     <template v-slot:[`item.grade`]="{ item }">
       {{ item.grade == null ? '--' : item.grade }}
     </template>
@@ -142,6 +172,7 @@ import type SystemStateDto from '@/models/SystemStateDto'
 import RemoteService from '@/services/RemoteService'
 import { useAuthStore } from '@/stores/auth'
 import { computed, ref } from 'vue'
+import { examStatusLabel, examStatusColor, examStatusRank } from '@/utils/labels'
 
 const auth = useAuthStore()
 
@@ -150,6 +181,7 @@ const newStudentId = ref<number | undefined>(undefined)
 const newSubjectId = ref<number | undefined>(undefined)
 
 const filterSchoolId = ref<number | undefined>(undefined)
+const search = ref('')
 
 const students = ref<PersonDto[]>([])
 const schools = ref<SchoolDto[]>([])
@@ -213,12 +245,28 @@ const uploadedCount = computed(
 
 const uploadsDisabled = computed(() => systemState.value?.examsLocked === true)
 
-const filteredExams = computed(() =>
-  exams.value.filter((e) => {
-    if (filterSchoolId.value != null && e.schoolId !== filterSchoolId.value) return false
-    return true
-  })
-)
+// Filtra por escola (se aplicável) + pesquisa livre, e ordena por defeito:
+// estado em curso no topo (UPLOADED→RELEASED), depois por id crescente.
+const sortedExams = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  return exams.value
+    .filter((e) => {
+      if (filterSchoolId.value != null && e.schoolId !== filterSchoolId.value) return false
+      if (q) {
+        const hay = [e.originalFilename, e.studentName, e.schoolName, e.subjectName, e.id]
+          .filter((v) => v != null)
+          .map((v) => String(v).toLowerCase())
+        if (!hay.some((v) => v.includes(q))) return false
+      }
+      return true
+    })
+    .slice()
+    .sort((a, b) => {
+      const r = examStatusRank(a.status) - examStatusRank(b.status)
+      if (r !== 0) return r
+      return (a.id ?? 0) - (b.id ?? 0)
+    })
+})
 
 function hasFragments(e: ExamDto): boolean {
   return (

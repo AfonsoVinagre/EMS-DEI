@@ -1,26 +1,89 @@
 <template>
   <h2 class="text-left ml-1">Correcções atribuídas</h2>
   <p class="text-left text-medium-emphasis ml-1 mb-4">
-    Lista dos fragmentos que foram distribuídos para si. Clique para ver a imagem
-    e submeter a nota quando terminar a correcção.
+    Lista dos fragmentos que foram distribuídos para si. Clique numa linha para
+    ver a imagem e submeter a nota quando terminar a correcção.
   </p>
 
+  <v-text-field
+    v-model="search"
+    label="Pesquisar (exame, disciplina, página…)"
+    prepend-inner-icon="mdi-magnify"
+    variant="outlined"
+    density="compact"
+    hide-details
+    single-line
+    class="mb-4"
+  ></v-text-field>
+
+  <!-- Por corrigir: sempre no topo. -->
+  <h3 class="text-left ml-1 mb-2 d-flex align-center">
+    Por corrigir
+    <v-chip size="x-small" variant="flat" color="warning" class="ml-2">
+      {{ pendingFragments.length }}
+    </v-chip>
+  </h3>
   <v-data-table
     :headers="headers"
-    :items="fragments"
+    :items="pendingFragments"
     :loading="loading"
     item-key="id"
-    class="text-left"
-    no-data-text="Não tem perguntas atribuídas para corrigir."
+    density="comfortable"
+    class="text-left mb-6"
+    no-data-text="Não tem perguntas por corrigir."
     @click:row="onRow"
   >
     <template v-slot:[`item.status`]="{ item }">
-      <v-chip
-        :color="statusColor(item.status)"
-        :text="statusLabel(item.status)"
-        size="small"
-        variant="tonal"
-      ></v-chip>
+      <span class="d-flex align-center ga-1">
+        <v-chip
+          :color="fragmentStatusColor(item.status)"
+          :text="fragmentStatusLabel(item.status)"
+          size="small"
+          variant="tonal"
+        ></v-chip>
+        <v-chip
+          v-if="isRevision(item.status)"
+          color="info"
+          size="x-small"
+          variant="tonal"
+          text="Revisão"
+        ></v-chip>
+      </span>
+    </template>
+  </v-data-table>
+
+  <!-- Concluídas: sempre no fundo. -->
+  <h3 class="text-left ml-1 mb-2 d-flex align-center text-medium-emphasis">
+    Concluídas
+    <v-chip size="x-small" variant="flat" color="success" class="ml-2">
+      {{ doneFragments.length }}
+    </v-chip>
+  </h3>
+  <v-data-table
+    :headers="headers"
+    :items="doneFragments"
+    item-key="id"
+    density="comfortable"
+    class="text-left"
+    no-data-text="Ainda não submeteu nenhuma correção."
+    @click:row="onRow"
+  >
+    <template v-slot:[`item.status`]="{ item }">
+      <span class="d-flex align-center ga-1">
+        <v-chip
+          :color="fragmentStatusColor(item.status)"
+          :text="fragmentStatusLabel(item.status)"
+          size="small"
+          variant="tonal"
+        ></v-chip>
+        <v-chip
+          v-if="isRevision(item.status)"
+          color="info"
+          size="x-small"
+          variant="tonal"
+          text="Revisão"
+        ></v-chip>
+      </span>
     </template>
   </v-data-table>
 
@@ -33,8 +96,8 @@
         <span>Fragmento #{{ selected.id }} — página {{ selected.pageNumber }}</span>
         <v-spacer></v-spacer>
         <v-chip
-          :color="statusColor(selected.status)"
-          :text="statusLabel(selected.status)"
+          :color="fragmentStatusColor(selected.status)"
+          :text="fragmentStatusLabel(selected.status)"
           size="small"
           variant="tonal"
         ></v-chip>
@@ -125,11 +188,17 @@ import type FragmentDto from '@/models/FragmentDto'
 import type CorrectionTaskDto from '@/models/CorrectionTaskDto'
 import RemoteService from '@/services/RemoteService'
 import { useAuthStore } from '@/stores/auth'
+import {
+  fragmentStatusLabel,
+  fragmentStatusColor,
+  isFragmentPending
+} from '@/utils/labels'
 
 const auth = useAuthStore()
 
 const fragments = ref<FragmentDto[]>([])
 const loading = ref(true)
+const search = ref('')
 
 const selected = ref<FragmentDto | null>(null)
 const drawer = ref(false)
@@ -147,29 +216,28 @@ const headers = [
   { title: 'Estado', key: 'status', value: 'status', sortable: true }
 ]
 
-function statusLabel(status: string | undefined): string {
-  switch (status) {
-    case 'UNASSIGNED': return 'Pendente'
-    case 'IN_CORRECTION': return 'Em correção'
-    case 'IN_REVISION': return 'Em revisão'
-    case 'CORRECTED': return 'Submetido'
-    case 'REVISION_SUBMITTED': return 'Revisão submetida'
-    default: return status ?? ''
-  }
+/** Revisão = fragmento cuja pipeline está em fase REVISION. */
+function isRevision(status: string | undefined): boolean {
+  return status === 'IN_REVISION' || status === 'REVISION_SUBMITTED'
 }
 
-function statusColor(status: string | undefined): string {
-  switch (status) {
-    case 'CORRECTED':
-    case 'REVISION_SUBMITTED':
-      return 'success'
-    case 'IN_CORRECTION':
-    case 'IN_REVISION':
-      return 'warning'
-    default:
-      return 'grey'
-  }
-}
+// Pesquisa livre: filtra por id/exame/disciplina/página antes de agrupar.
+const filteredFragments = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return fragments.value
+  return fragments.value.filter((f) =>
+    [f.id, f.examId, f.pageNumber, f.subjectName]
+      .filter((v) => v != null)
+      .some((v) => String(v).toLowerCase().includes(q))
+  )
+})
+
+const pendingFragments = computed(() =>
+  filteredFragments.value.filter((f) => isFragmentPending(f.status))
+)
+const doneFragments = computed(() =>
+  filteredFragments.value.filter((f) => !isFragmentPending(f.status))
+)
 
 const canSubmit = computed(() =>
   gradeInput.value != null && gradeInput.value >= 0

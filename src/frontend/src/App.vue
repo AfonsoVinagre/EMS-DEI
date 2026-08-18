@@ -3,14 +3,14 @@
     <TopBar v-if="authStore.isAuthenticated" />
     <v-main
       :style="{ marginTop: authStore.isAuthenticated ? '96px' : '0' }"
-      class="pa-10 d-flex flex-column flex-grow-1 flex-shrink-1 text-center"
+      class="d-flex flex-column flex-grow-1 flex-shrink-1"
     >
-      <v-card class="elevation-4 pa-8" width="100%">
+      <v-container fluid class="pa-4 pa-sm-6 mx-auto" style="max-width: 1280px;">
         <ErrorMessage />
         <LoadingOverlay />
 
         <RouterView />
-      </v-card>
+      </v-container>
     </v-main>
   </v-layout>
 </template>

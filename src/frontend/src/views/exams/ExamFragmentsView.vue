@@ -183,6 +183,7 @@ import type FragmentDto from '@/models/FragmentDto'
 import type CorrectionTaskDto from '@/models/CorrectionTaskDto'
 import RemoteService from '@/services/RemoteService'
 import { useAuthStore } from '@/stores/auth'
+import { examStatusLabel, fragmentStatusLabel, phaseLabel } from '@/utils/labels'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -238,46 +239,6 @@ const taskHeaders = [
   { title: 'Nota', key: 'grade', value: 'grade', sortable: false },
   { title: 'Ações', key: 'actions', value: 'actions', sortable: false }
 ]
-
-/**
- * Translates the @Transient Fragment.status (computed in the backend from
- * the latest CorrectionTask) to a human-readable Portuguese label. The
- * status reflects where the CorrectionTask pipeline is, not the exam's
- * own lifecycle.
- */
-function fragmentStatusLabel(status: string | undefined): string {
-  switch (status) {
-    case 'UNASSIGNED': return 'Pendente'
-    case 'IN_CORRECTION': return 'Em correção'
-    case 'IN_REVISION': return 'Em revisão'
-    case 'CORRECTED': return 'Submetido'
-    case 'REVISION_SUBMITTED': return 'Revisão submetida'
-    default: return status ?? ''
-  }
-}
-
-function phaseLabel(phase: CorrectionTaskDto['phase'] | undefined): string {
-  switch (phase) {
-    case 'PRIMARY': return 'Em correção'
-    case 'REVISION': return 'Em revisão'
-    default: return ''
-  }
-}
-
-/**
- * Translates Exam.ExamStatus (the lifecycle of the exam itself: UPLOADED
- * → DISTRIBUTED → CORRECTED → RELEASED) to a Portuguese label for the
- * "PDF completo" row.
- */
-function examStatusLabel(status: string | undefined | null): string {
-  switch (status) {
-    case 'UPLOADED': return 'Submetido'
-    case 'DISTRIBUTED': return 'Distribuído'
-    case 'CORRECTED': return 'Corrigido'
-    case 'RELEASED': return 'Publicado'
-    default: return status ?? ''
-  }
-}
 
 /** The most recent CorrectionTask for the selected fragment. */
 const latestTask = computed(() => {

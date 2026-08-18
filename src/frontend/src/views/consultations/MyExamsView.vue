@@ -16,7 +16,12 @@
     no-data-text="Ainda não tem exames."
   >
     <template v-slot:[`item.status`]="{ item }">
-      {{ examStatusLabel(item.status) }}
+      <v-chip
+        :color="examStatusColor(item.status)"
+        :text="examStatusLabel(item.status)"
+        size="small"
+        variant="tonal"
+      ></v-chip>
     </template>
     <template v-slot:[`item.revision`]="{ item }">
       <v-chip
@@ -64,6 +69,7 @@ import type ExamDto from '@/models/ExamDto'
 import type ConsultationRequestDto from '@/models/ConsultationRequestDto'
 import type RevisionRequestDto from '@/models/RevisionRequestDto'
 import RemoteService from '@/services/RemoteService'
+import { examStatusLabel, examStatusColor } from '@/utils/labels'
 import { ref } from 'vue'
 
 const exams = ref<ExamDto[]>([])
@@ -79,16 +85,6 @@ const headers = [
   { title: 'Nota', key: 'grade', value: 'grade', sortable: true },
   { title: 'Ação', key: 'actions', value: 'actions', sortable: false }
 ]
-
-function examStatusLabel(status: string | undefined): string {
-  switch (status) {
-    case 'UPLOADED': return 'Submetido'
-    case 'DISTRIBUTED': return 'Em correção'
-    case 'CORRECTED': return 'Corrigido'
-    case 'RELEASED': return 'Disponível'
-    default: return status ?? ''
-  }
-}
 
 function revisionLabel(exam: ExamDto): string {
   // The chip only renders when this student has a revision request for the

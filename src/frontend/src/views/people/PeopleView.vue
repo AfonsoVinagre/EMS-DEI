@@ -29,17 +29,8 @@
     no-data-text="Sem pessoas a apresentar."
   >
     <template v-slot:[`item.type`]="{ item }">
-      <v-chip v-if="item.type === 'ADMINISTRATOR'" color="purple" text-color="white">
-        Administrador
-      </v-chip>
-      <v-chip v-else-if="item.type === 'TEACHER'" color="red" text-color="white">
-        Professor
-      </v-chip>
-      <v-chip v-else-if="item.type === 'SCHOOL_STAFF'" color="orange" text-color="white">
-        Funcionário
-      </v-chip>
-      <v-chip v-else color="green" text-color="white">
-        Aluno
+      <v-chip :color="roleColor(item.type)" size="small" variant="tonal">
+        {{ roleLabel(item.type) }}
       </v-chip>
     </template>
     <template v-slot:[`item.actions`]="{ item }">
@@ -50,8 +41,8 @@
         color="primary"
         title="Personificar"
       >mdi-account-switch</v-icon>
-      <v-icon @click="editPerson(item)" class="mr-2">mdi-pencil</v-icon>
-      <v-icon @click="deletePerson(item)">mdi-delete</v-icon>
+      <v-icon @click="editPerson(item)" class="mr-2" title="Editar">mdi-pencil</v-icon>
+      <v-icon @click="deletePerson(item)" color="error" title="Eliminar">mdi-delete</v-icon>
     </template>
 
   </v-data-table>
@@ -104,20 +95,36 @@ const headers = [
 
 const people: PeopleDto[] = reactive([])
 
+// Cores e labels consistentes com os tokens do tema (chips tonal, como o
+// resto da app). ADMIN→primary, TEACHER→error, SCHOOL_STAFF→warning, STUDENT→success.
+const ROLE_LABELS: Record<string, string> = {
+  ADMINISTRATOR: 'Administrador',
+  TEACHER: 'Professor',
+  SCHOOL_STAFF: 'Funcionário',
+  STUDENT: 'Aluno'
+}
+const ROLE_COLORS: Record<string, string> = {
+  ADMINISTRATOR: 'primary',
+  TEACHER: 'error',
+  SCHOOL_STAFF: 'warning',
+  STUDENT: 'success'
+}
+const roleLabel = (role: string | undefined) => ROLE_LABELS[role ?? ''] ?? (role ?? '')
+const roleColor = (role: string | undefined) => ROLE_COLORS[role ?? ''] ?? 'grey'
+
 getPeople()
 async function getPeople() {
   people.splice(0, people.length)
   people.push(...(await RemoteService.getPeople()))
   loading.value = false
-  console.log(people)
 }
 
 const editPerson = (person: PeopleDto) => {
-  console.log('Editing person:', person)
+  // TODO: por implementar (precisa de endpoint de update).
 }
 
 const deletePerson = (person: PeopleDto) => {
-  console.log('Deleting person:', person)
+  // TODO: por implementar (precisa de endpoint de delete).
 }
 
 // Admin-only: log in as the selected person, then refresh the list under their
