@@ -1,6 +1,7 @@
 package pt.ulisboa.tecnico.rnl.dei.ems.exam.service;
 
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -18,7 +19,13 @@ import java.util.stream.Collectors;
 import javax.imageio.ImageIO;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.graphics.state.PDExtendedGraphicsState;
 import org.apache.pdfbox.rendering.PDFRenderer;
+import org.apache.pdfbox.util.Matrix;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -266,6 +273,93 @@ public class ExamService {
 			throw new DEIException(ErrorMessage.PDF_RENDER_ERROR);
 		}
 		return pdfPath;
+	}
+
+	/**
+	 * Returns the exam PDF with a <em>dynamic</em> watermark stamped on every
+	 * page, identifying who is downloading and when: the caller's email, the
+	 * download instant and the client IP. The on-disk file is left untouched —
+	 * the stamp is rendered in-memory per request, so each download carries a
+	 * unique trace (this is the "Marcas de Água Dinâmicas" feature: prevents
+	 * improper sharing and traces leaks).
+	 *
+	 * <p>If stamping fails for any reason, falls back to the original bytes so
+	 * the watermark never blocks access to the exam.
+	 *
+	 * <p>Only the full PDF is watermarked — fragment images are NOT, because
+	 * they are served to teachers (blind correction) and would reveal the
+	 * student's identity.
+	 */
+	@Transactional
+	public byte[] watermarkedPdf(long examId, Person current, String clientIp) {
+		java.nio.file.Path pdfPath = resolvePdfPath(examId);
+		String email = (current != null && current.getEmail() != null) ? current.getEmail() : "anonymous";
+		String when = Instant.now().toString();
+		String ip = (clientIp != null && !clientIp.isBlank()) ? clientIp : "unknown";
+		String footer = "EMS · " + email + " · " + when + " · IP " + ip;
+
+		float rad = (float) Math.toRadians(45);
+		float cos = (float) Math.cos(rad);
+		float sin = (float) Math.sin(rad);
+
+		try (PDDocument doc = PDDocument.load(pdfPath.toFile())) {
+			PDType1Font bold = PDType1Font.HELVETICA_BOLD;
+			PDType1Font reg = PDType1Font.HELVETICA;
+			for (PDPage page : doc.getPages()) {
+				PDRectangle box = page.getMediaBox();
+				float w = box.getWidth();
+				float h = box.getHeight();
+				try (PDPageContentStream cs = new PDPageContentStream(doc, page,
+						PDPageContentStream.AppendMode.APPEND, true, true)) {
+					// Diagonal, semi-transparent email across the middle (deterrent).
+					PDExtendedGraphicsState diag = new PDExtendedGraphicsState();
+					diag.setNonStrokingAlphaConstant(0.25f);
+					diag.setStrokingAlphaConstant(0.25f);
+					cs.setGraphicsStateParameters(diag);
+					cs.setNonStrokingColor(200, 200, 200);
+					cs.beginText();
+					float fontSize = 48f;
+					cs.setFont(bold, fontSize);
+					// Center the rotated text on the page: the text origin sits at
+					// (cx - halfWidth*cos, cy - halfWidth*sin) so that, extending
+					// textWidth along the rotated x-axis (cos, sin), its midpoint
+					// lands exactly at the page center (w/2, h/2). getStringWidth
+					// is in 1000-unit glyph space → scale by fontSize/1000.
+					float textWidth = bold.getStringWidth(email) / 1000f * fontSize;
+					float cx = w / 2f;
+					float cy = h / 2f;
+					float tx = cx - (textWidth / 2f) * cos;
+					float ty = cy - (textWidth / 2f) * sin;
+					// Rotation matrix (version-safe in PDFBox 2.x): [cos sin -sin cos tx ty].
+					cs.setTextMatrix(new Matrix(cos, sin, -sin, cos, tx, ty));
+					cs.showText(email);
+					cs.endText();
+
+					// Footer trace line: email · date · IP, bottom of every page.
+					PDExtendedGraphicsState foot = new PDExtendedGraphicsState();
+					foot.setNonStrokingAlphaConstant(0.55f);
+					cs.setGraphicsStateParameters(foot);
+					cs.setNonStrokingColor(90, 90, 90);
+					cs.beginText();
+					cs.setFont(reg, 8);
+					// Reset the text matrix (the diagonal above left it rotated).
+					cs.setTextMatrix(new Matrix(1, 0, 0, 1, 20, 18));
+					cs.showText(footer);
+					cs.endText();
+				}
+			}
+			ByteArrayOutputStream baos = new ByteArrayOutputStream();
+			doc.save(baos);
+			return baos.toByteArray();
+		} catch (IOException e) {
+			// Stamping failed: fall back to the untouched original so the
+			// watermark never blocks access to the exam.
+			try {
+				return Files.readAllBytes(pdfPath);
+			} catch (IOException ioe) {
+				throw new DEIException(ErrorMessage.PDF_RENDER_ERROR);
+			}
+		}
 	}
 
 	@Transactional

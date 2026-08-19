@@ -149,7 +149,20 @@
     <v-row class="mt-2">
       <!-- Lado esquerdo: PDF original do exame -->
       <v-col cols="12" md="7">
-        <h3 class="text-left mb-2">PDF original</h3>
+        <div class="d-flex align-center mb-2">
+          <h3 class="text-left">PDF original</h3>
+          <v-spacer></v-spacer>
+          <v-btn
+            v-if="pdfUrl"
+            size="small"
+            variant="tonal"
+            color="primary"
+            prepend-icon="mdi-download"
+            :href="pdfUrl"
+            :download="`exame-${examId}.pdf`"
+            text="Descarregar PDF"
+          ></v-btn>
+        </div>
         <v-card variant="outlined">
           <iframe
             v-if="pdfUrl"

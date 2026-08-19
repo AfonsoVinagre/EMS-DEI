@@ -1,13 +1,8 @@
 package pt.ulisboa.tecnico.rnl.dei.ems.exam;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +13,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 import pt.ulisboa.tecnico.rnl.dei.ems.exceptions.DEIException;
 import pt.ulisboa.tecnico.rnl.dei.ems.exceptions.ErrorMessage;
@@ -95,27 +92,39 @@ public class ExamController {
 	 * segmented fragments.
 	 */
 	/**
-	 * Streams the original (unsegmented) PDF for an exam. Used by the staff
-	 * / admin exam-detail page to show the full document alongside the
-	 * segmented fragments. Students may only fetch the PDF of their own
-	 * exams once those have been released.
+	 * Streams the exam PDF with a dynamic watermark stamped on every page
+	 * (Marcas de Água Dinâmicas): the caller's email, the download instant and
+	 * the client IP. The on-disk file is untouched — the stamp is rendered per
+	 * request. Used by the staff/admin exam-detail page and by the student
+	 * consultation view. Students may only fetch their own released exams.
 	 */
 	@GetMapping("/exams/{id}/pdf")
 	@PreAuthorize("hasAuthority('EXAM_READ')")
-	public ResponseEntity<InputStreamResource> getPdf(@PathVariable long id) throws IOException {
-		if (SecurityUtils.currentPerson() == null) {
+	public ResponseEntity<byte[]> getPdf(@PathVariable long id, HttpServletRequest request) {
+		Person current = SecurityUtils.currentPerson();
+		if (current == null) {
 			throw new DEIException(ErrorMessage.NOT_AUTHENTICATED);
 		}
 		// Students are gated to their own released exams; staff/admins pass through.
 		examService.assertStudentCanViewContent(id);
-		Path pdfPath = examService.resolvePdfPath(id);
-		InputStream stream = Files.newInputStream(pdfPath);
+		byte[] pdf = examService.watermarkedPdf(id, current, clientIp(request));
 		HttpHeaders headers = new HttpHeaders();
 		headers.setContentType(MediaType.APPLICATION_PDF);
-		headers.setContentLength(pdfPath.toFile().length());
-		headers.setContentDispositionFormData("inline", pdfPath.getFileName().toString());
-		return new ResponseEntity<>(new InputStreamResource(stream), headers,
-				org.springframework.http.HttpStatus.OK);
+		headers.setContentLength(pdf.length);
+		headers.setContentDispositionFormData("inline", "exame-" + id + ".pdf");
+		return new ResponseEntity<>(pdf, headers, org.springframework.http.HttpStatus.OK);
+	}
+
+	/**
+	 * Client IP, honoring {@code X-Forwarded-For} when a proxy/load-balancer is
+	 * in front of the app (first hop); falls back to the raw remote address.
+	 */
+	private static String clientIp(HttpServletRequest request) {
+		String forwarded = request.getHeader("X-Forwarded-For");
+		if (forwarded != null && !forwarded.isBlank()) {
+			return forwarded.split(",")[0].trim();
+		}
+		return request.getRemoteAddr();
 	}
 
 	/**
