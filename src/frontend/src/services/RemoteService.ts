@@ -14,6 +14,8 @@ import type CorrectionTaskDto from '@/models/CorrectionTaskDto'
 import type ConsultationRequestDto from '@/models/ConsultationRequestDto'
 import type RevisionRequestDto from '@/models/RevisionRequestDto'
 import type SystemStateDto from '@/models/SystemStateDto'
+import type AuditLogDto from '@/models/AuditLogDto'
+import type IntegrityReportDto from '@/models/IntegrityReportDto'
 
 const httpClient = axios.create()
 httpClient.defaults.timeout = 50000
@@ -159,6 +161,15 @@ export default class RemoteServices {
 
   static async getRevisionRequests(): Promise<RevisionRequestDto[]> {
     return httpClient.get('/revision-requests')
+  }
+
+  // --- Audit log (Registo de Auditoria Inviolável) ---
+  static async getAuditLogs(): Promise<AuditLogDto[]> {
+    return httpClient.get('/audit-logs')
+  }
+
+  static async getAuditIntegrity(): Promise<IntegrityReportDto> {
+    return httpClient.get('/audit-logs/verify')
   }
 
   // --- Fragments ---

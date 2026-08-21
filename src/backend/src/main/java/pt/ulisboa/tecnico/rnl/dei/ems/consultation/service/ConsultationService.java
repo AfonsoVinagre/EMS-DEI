@@ -10,6 +10,8 @@ import org.springframework.transaction.annotation.Transactional;
 import pt.ulisboa.tecnico.rnl.dei.ems.consultation.domain.ConsultationRequest;
 import pt.ulisboa.tecnico.rnl.dei.ems.consultation.dto.ConsultationRequestDto;
 import pt.ulisboa.tecnico.rnl.dei.ems.consultation.repository.ConsultationRequestRepository;
+import pt.ulisboa.tecnico.rnl.dei.ems.audit.domain.AuditAction;
+import pt.ulisboa.tecnico.rnl.dei.ems.audit.service.AuditService;
 import pt.ulisboa.tecnico.rnl.dei.ems.exceptions.DEIException;
 import pt.ulisboa.tecnico.rnl.dei.ems.exceptions.ErrorMessage;
 import pt.ulisboa.tecnico.rnl.dei.ems.exam.domain.Exam;
@@ -36,6 +38,9 @@ public class ConsultationService {
 	@Autowired
 	private ExamService examService;
 
+	@Autowired
+	private AuditService auditService;
+
 	/**
 	 * A student files a consultation request for one of their exams. Allowed
 	 * only when the exam is theirs and fully corrected, and there is no
@@ -61,7 +66,11 @@ public class ConsultationService {
 			throw new DEIException(ErrorMessage.CONSULTATION_REQUEST_ALREADY_PENDING);
 		}
 		ConsultationRequest request = new ConsultationRequest(exam, current);
-		return new ConsultationRequestDto(consultationRequestRepository.save(request));
+		consultationRequestRepository.save(request);
+		auditService.record(current, AuditAction.CONSULTATION_REQUEST, "CONSULTATION_REQUEST",
+				request.getId(),
+				"Aluno " + current.getName() + " pediu consulta do exame " + exam.getId());
+		return new ConsultationRequestDto(request);
 	}
 
 	@Transactional
@@ -94,7 +103,12 @@ public class ConsultationService {
 		request.setDecidedAt(Instant.now());
 		request.setDecidedBy(current);
 		consultationRequestRepository.save(request);
-		// Granting access = releasing the exam so the student can consult.
+		auditService.record(current, AuditAction.CONSULTATION_APPROVE, "CONSULTATION_REQUEST",
+				request.getId(),
+				"Funcionário " + current.getName() + " aprovou o pedido de consulta #"
+						+ request.getId() + " (exame " + request.getExam().getId() + ")");
+		// Granting access = releasing the exam so the student can consult. The
+		// resulting EXAM_RELEASE is audited inside markReleased.
 		examService.releaseExam(request.getExam().getId());
 		return new ConsultationRequestDto(request);
 	}
@@ -109,6 +123,10 @@ public class ConsultationService {
 		request.setDecidedAt(Instant.now());
 		request.setDecidedBy(current);
 		consultationRequestRepository.save(request);
+		auditService.record(current, AuditAction.CONSULTATION_REJECT, "CONSULTATION_REQUEST",
+				request.getId(),
+				"Funcionário " + current.getName() + " rejeitou o pedido de consulta #"
+						+ request.getId() + " (exame " + request.getExam().getId() + ")");
 		return new ConsultationRequestDto(request);
 	}
 
@@ -128,6 +146,11 @@ public class ConsultationService {
 				request.setDecidedAt(Instant.now());
 				request.setDecidedBy(current);
 				consultationRequestRepository.save(request);
+				auditService.record(current, AuditAction.CONSULTATION_AUTO_APPROVE,
+						"CONSULTATION_REQUEST", request.getId(),
+						"Pedido de consulta #" + request.getId()
+								+ " auto-aprovado (disponibilização em massa do exame "
+								+ request.getExam().getId() + ")");
 			}
 		}
 	}

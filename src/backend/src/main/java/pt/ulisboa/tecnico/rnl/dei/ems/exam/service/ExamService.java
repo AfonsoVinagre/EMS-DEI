@@ -34,6 +34,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import pt.ulisboa.tecnico.rnl.dei.ems.correction.domain.CorrectionTask;
 import pt.ulisboa.tecnico.rnl.dei.ems.correction.repository.CorrectionTaskRepository;
+import pt.ulisboa.tecnico.rnl.dei.ems.audit.domain.AuditAction;
+import pt.ulisboa.tecnico.rnl.dei.ems.audit.service.AuditService;
 import pt.ulisboa.tecnico.rnl.dei.ems.exceptions.DEIException;
 import pt.ulisboa.tecnico.rnl.dei.ems.exceptions.ErrorMessage;
 import pt.ulisboa.tecnico.rnl.dei.ems.exam.domain.Exam;
@@ -81,6 +83,9 @@ public class ExamService {
 
 	@Autowired
 	private SystemStateService systemStateService;
+
+	@Autowired
+	private AuditService auditService;
 
 	@Value("${ems.storage.exams-dir}")
 	private String examsDir;
@@ -200,6 +205,11 @@ public class ExamService {
 		// separate step (and so the "lock uploads" guard does not depend
 		// on a batch operation they could forget to run).
 		segmentInternal(exam);
+
+		auditService.record(SecurityUtils.currentPerson(), AuditAction.EXAM_UPLOAD,
+				"EXAM", exam.getId(),
+				"Exame " + exam.getId() + " carregado (aluno " + student.getName()
+						+ ", disciplina " + subject.getName() + ")");
 		return examDto(exam, null);
 	}
 
@@ -297,6 +307,11 @@ public class ExamService {
 		String when = Instant.now().toString();
 		String ip = (clientIp != null && !clientIp.isBlank()) ? clientIp : "unknown";
 		String footer = "EMS · " + email + " · " + when + " · IP " + ip;
+
+		// Audit every PDF access — complements the watermark: each download /
+		// view is traced with who, when and IP (leak tracing, per enunciado).
+		auditService.record(current, AuditAction.PDF_ACCESS, "EXAM", examId,
+				email + " acedeu ao PDF do exame " + examId + " (IP " + ip + ")");
 
 		float rad = (float) Math.toRadians(45);
 		float cos = (float) Math.cos(rad);
@@ -518,6 +533,9 @@ public class ExamService {
 		if (!uploaded.isEmpty()) {
 			// Permanent marker: from now on, the lock cannot be reversed.
 			systemStateService.markDistributed();
+			auditService.record(SecurityUtils.currentPerson(), AuditAction.EXAM_DISTRIBUTE,
+					"EXAM", null,
+					"Distribuição de " + uploaded.size() + " exame(s) para correção");
 		}
 		return uploaded.stream().map(Exam::getId).toList();
 	}
@@ -610,6 +628,13 @@ public class ExamService {
 			exam.setReleasedAt(Instant.now());
 		}
 		examRepository.save(exam);
+		// Audit every exam release (single via consultation approval, or bulk)
+		// as a per-exam entry — one EXAM_RELEASE per exam that becomes RELEASED,
+		// regardless of which path triggered it. Actor = the staff in context.
+		auditService.record(SecurityUtils.currentPerson(), AuditAction.EXAM_RELEASE,
+				"EXAM", exam.getId(),
+				"Exame " + exam.getId() + " disponibilizado para consulta (disciplina "
+						+ exam.getSubject().getName() + ")");
 	}
 
 	/**
@@ -658,6 +683,8 @@ public class ExamService {
 		for (Exam exam : corrected) {
 			markReleased(exam);
 		}
+		// Per-exam EXAM_RELEASE entries are recorded inside markReleased; the
+		// pending consultation requests for these exams are auto-approved below.
 		return corrected.stream().map(Exam::getId).toList();
 	}
 

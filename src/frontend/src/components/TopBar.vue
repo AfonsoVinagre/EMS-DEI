@@ -23,6 +23,7 @@ const auth = useAuthStore()
 // so an admin impersonating staff behaves like a staff (only sees Exames).
 const navbarItems: NavItem[] = [
   { name: 'Dashboard', path: '/dashboard', icon: 'mdi-view-dashboard-outline', roles: ['ADMINISTRATOR'] },
+  { name: 'Logs', path: '/audit', icon: 'mdi-shield-check-outline', roles: ['ADMINISTRATOR'] },
   { name: 'Pessoal', path: '/people', icon: 'mdi-account-group', roles: ['ADMINISTRATOR'] },
   { name: 'Escolas', path: '/schools', icon: 'mdi-school', roles: ['ADMINISTRATOR'] },
   { name: 'Disciplinas', path: '/subjects', icon: 'mdi-book-open-variant', roles: ['ADMINISTRATOR'] },

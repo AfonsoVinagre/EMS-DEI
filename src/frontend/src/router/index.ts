@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import LoginView from '@/views/LoginView.vue'
 import DashboardView from '@/views/dashboard/DashboardView.vue'
+import AuditView from '@/views/audit/AuditView.vue'
 import PeopleView from '@/views/people/PeopleView.vue'
 import StatisticsView from '@/views/statistics/StatisticsView.vue'
 import SchoolsView from '@/views/schools/SchoolsView.vue'
@@ -45,6 +46,14 @@ const router = createRouter({
       name: 'dashboard',
       component: DashboardView,
       meta: { allowedRoles: ADMIN_ONLY }
+    },
+    {
+      // Registo de Auditoria Inviolável: log append-only com hash-chain,
+      // consultável apenas pelo administrador para resolver disputas.
+      path: '/audit',
+      name: 'audit',
+      component: AuditView,
+      meta: { permission: 'AUDIT_READ', allowedRoles: ADMIN_ONLY }
     },
     {
       path: '/people',

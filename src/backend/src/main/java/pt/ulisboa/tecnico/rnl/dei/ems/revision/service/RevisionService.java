@@ -24,6 +24,8 @@ import pt.ulisboa.tecnico.rnl.dei.ems.correction.domain.CorrectionTask;
 import pt.ulisboa.tecnico.rnl.dei.ems.correction.repository.CorrectionTaskRepository;
 import pt.ulisboa.tecnico.rnl.dei.ems.exceptions.DEIException;
 import pt.ulisboa.tecnico.rnl.dei.ems.exceptions.ErrorMessage;
+import pt.ulisboa.tecnico.rnl.dei.ems.audit.domain.AuditAction;
+import pt.ulisboa.tecnico.rnl.dei.ems.audit.service.AuditService;
 import pt.ulisboa.tecnico.rnl.dei.ems.exam.domain.Exam;
 import pt.ulisboa.tecnico.rnl.dei.ems.exam.repository.ExamRepository;
 import pt.ulisboa.tecnico.rnl.dei.ems.fragment.domain.Fragment;
@@ -75,6 +77,9 @@ public class RevisionService {
 
 	@Autowired
 	private PlatformTransactionManager transactionManager;
+
+	@Autowired
+	private AuditService auditService;
 
 	@Value("${ems.revision.window-hours:48}")
 	private long revisionWindowHours;
@@ -139,6 +144,9 @@ public class RevisionService {
 			request.addItem(new RevisionItem(fragment, item.justification().strip()));
 		}
 		revisionRequestRepository.save(request); // cascades items
+		auditService.record(current, AuditAction.REVISION_REQUEST, "EXAM", exam.getId(),
+				"Aluno " + current.getName() + " pediu revisão do exame " + exam.getId()
+						+ " (" + items.size() + " pergunta(s))");
 		return new RevisionRequestDto(request);
 	}
 
@@ -225,6 +233,9 @@ public class RevisionService {
 		}
 		exam.setRevisionDistributed(true);
 		examRepository.save(exam);
+		auditService.recordSystem(AuditAction.REVISION_PROCESS, "EXAM", examId,
+				"Janela de revisão encerrada: " + targets.size()
+						+ " pergunta(s) redistribuída(s) para revisão no exame " + examId);
 		logger.info("Revision window closed for exam {} ({} targeted fragment(s) redistributed)",
 				examId, targets.size());
 	}

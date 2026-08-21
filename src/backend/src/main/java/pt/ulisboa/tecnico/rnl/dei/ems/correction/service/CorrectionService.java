@@ -15,6 +15,8 @@ import pt.ulisboa.tecnico.rnl.dei.ems.correction.dto.CorrectionTaskDto;
 import pt.ulisboa.tecnico.rnl.dei.ems.correction.dto.ReassignTaskRequest;
 import pt.ulisboa.tecnico.rnl.dei.ems.correction.dto.SubmitGradeRequest;
 import pt.ulisboa.tecnico.rnl.dei.ems.correction.repository.CorrectionTaskRepository;
+import pt.ulisboa.tecnico.rnl.dei.ems.audit.domain.AuditAction;
+import pt.ulisboa.tecnico.rnl.dei.ems.audit.service.AuditService;
 import pt.ulisboa.tecnico.rnl.dei.ems.exceptions.DEIException;
 import pt.ulisboa.tecnico.rnl.dei.ems.exceptions.ErrorMessage;
 import pt.ulisboa.tecnico.rnl.dei.ems.exam.domain.Exam;
@@ -46,6 +48,9 @@ public class CorrectionService {
 
 	@Autowired
 	private RevisionItemRepository revisionItemRepository;
+
+	@Autowired
+	private AuditService auditService;
 
 	/**
 	 * Builds the {@link CorrectionTaskDto} for a task. For {@code REVISION}
@@ -140,10 +145,38 @@ public class CorrectionService {
 		if (grade == null || grade < 0) {
 			throw new DEIException(ErrorMessage.GRADE_NOT_VALID);
 		}
+		// Fragment's definitive grade before this submission (latest SUBMITTED
+		// task on the same fragment, excluding this one) — the "previous value"
+		// for the audit, so a revision surfaces as "alterou de 1.5 para 2.0".
+		long fragmentId = task.getFragment().getId();
+		Double prevDefinitive = correctionTaskRepository.findByFragmentId(fragmentId).stream()
+				.filter(t -> t.getStatus() == Status.SUBMITTED
+						&& (task.getId() == null || !t.getId().equals(task.getId())))
+				.max(java.util.Comparator.comparing(
+						CorrectionTask::getSubmittedAt,
+						java.util.Comparator.nullsFirst(Instant::compareTo)))
+				.map(CorrectionTask::getGrade)
+				.orElse(null);
 		task.setGrade(grade);
 		task.setStatus(Status.SUBMITTED);
 		task.setSubmittedAt(Instant.now());
 		correctionTaskRepository.save(task);
+
+		// Audit: the enunciado's headline example — "Professor X atribuiu a
+		// nota Y ao fragmento Z" (with the previous grade when it's a change).
+		int page = task.getFragment().getPageNumber();
+		StringBuilder desc = new StringBuilder()
+				.append("Professor ").append(current.getName())
+				.append(" atribuiu a nota ").append(grade)
+				.append(" ao fragmento ").append(fragmentId)
+				.append(" (pergunta ").append(page).append(")");
+		if (prevDefinitive != null) {
+			desc.append("; anterior: ").append(prevDefinitive);
+		}
+		auditService.record(current, AuditAction.GRADE_SUBMIT, "FRAGMENT", fragmentId,
+				desc.toString(),
+				prevDefinitive != null ? String.valueOf(prevDefinitive) : null,
+				String.valueOf(grade));
 
 		// A fragment is "corrected" once its task is SUBMITTED. Every time a
 		// fragment is corrected, check whether the whole exam is now fully
