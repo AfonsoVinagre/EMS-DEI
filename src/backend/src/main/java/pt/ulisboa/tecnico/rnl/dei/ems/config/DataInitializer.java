@@ -58,10 +58,12 @@ import pt.ulisboa.tecnico.rnl.dei.ems.teacherassignment.repository.TeacherAssign
  *   joao.mendes@ems.pt                  STUDENT       (IST)
  *   marta.ferreira@ems.pt               STUDENT       (IST)
  *   pedro.almeida@ems.pt                STUDENT       (IST)
+ *   beatriz.santos@ems.pt               STUDENT       (IST)
  *   rita.cardoso@ems.pt                 STUDENT       (FCT)
  *   tiago.nunes@ems.pt                  STUDENT       (FCT)
  *   sofia.reis@ems.pt                   STUDENT       (FCT)
  *   hugo.pinto@ems.pt                   STUDENT       (FCT)
+ *   goncalo.pereira@ems.pt              STUDENT       (FCT)
  */
 @Component
 public class DataInitializer implements CommandLineRunner {
@@ -139,6 +141,8 @@ public class DataInitializer implements CommandLineRunner {
 		upsertPerson("Tiago Nunes",    "tiago.nunes@ems.pt",    "password123", PersonType.STUDENT, fct);
 		upsertPerson("Sofia Reis",     "sofia.reis@ems.pt",     "password123", PersonType.STUDENT, fct);
 		upsertPerson("Hugo Pinto",     "hugo.pinto@ems.pt",     "password123", PersonType.STUDENT, fct);
+		upsertPerson("Beatriz Santos", "beatriz.santos@ems.pt", "password123", PersonType.STUDENT, ist);
+		upsertPerson("Gonçalo Pereira","goncalo.pereira@ems.pt","password123", PersonType.STUDENT, fct);
 
 		upsertSystemState();
 

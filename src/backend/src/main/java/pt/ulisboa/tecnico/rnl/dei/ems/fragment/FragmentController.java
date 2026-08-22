@@ -2,6 +2,7 @@ package pt.ulisboa.tecnico.rnl.dei.ems.fragment;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -67,6 +68,28 @@ public class FragmentController {
 		HttpHeaders headers = new HttpHeaders();
 		headers.setContentType(MediaType.IMAGE_PNG);
 		headers.setContentLength(imagePath.toFile().length());
+		return new ResponseEntity<>(new InputStreamResource(stream), headers,
+				org.springframework.http.HttpStatus.OK);
+	}
+
+	/**
+	 * The annotated version of a fragment image — the composited PNG submitted
+	 * with the fragment's definitive correction task (REVISION if any, else
+	 * PRIMARY). This is what the student sees in consultation instead of the
+	 * raw image. Returns 400 (ANNOTATION_NOT_FOUND) when there is no
+	 * annotation, so the frontend can fall back to {@code getImage}.
+	 */
+	@GetMapping("/fragments/{id}/annotated-image")
+	@PreAuthorize("hasAuthority('EXAM_READ')")
+	public ResponseEntity<InputStreamResource> getAnnotatedImage(@PathVariable long id) throws IOException {
+		if (SecurityUtils.currentPerson() == null) {
+			throw new DEIException(ErrorMessage.NOT_AUTHENTICATED);
+		}
+		Path path = fragmentService.resolveDefinitiveAnnotatedImagePath(id);
+		InputStream stream = Files.newInputStream(path);
+		HttpHeaders headers = new HttpHeaders();
+		headers.setContentType(MediaType.IMAGE_PNG);
+		headers.setContentLength(path.toFile().length());
 		return new ResponseEntity<>(new InputStreamResource(stream), headers,
 				org.springframework.http.HttpStatus.OK);
 	}

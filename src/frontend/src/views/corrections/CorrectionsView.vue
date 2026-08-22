@@ -103,9 +103,19 @@
         ></v-chip>
       </v-card-title>
       <v-card-text>
+        <!-- Open task: the canvas annotation tool over the raw fragment image.
+             The teacher draws vistos/correções/texto; the composite is uploaded
+             with the grade on "Avaliar". -->
+        <AnnotationCanvas
+          v-if="canEdit"
+          ref="canvasRef"
+          :src="imageUrl ?? ''"
+        ></AnnotationCanvas>
+        <!-- Submitted task: read-only. Show the teacher's own annotated image
+             when there is one, otherwise the raw fragment image. -->
         <v-img
-          v-if="imageUrl"
-          :src="imageUrl"
+          v-else-if="displayImageUrl"
+          :src="displayImageUrl"
           max-height="650"
           contain
         ></v-img>
@@ -172,6 +182,15 @@
               ></v-btn>
             </v-col>
           </v-row>
+          <v-alert
+            v-if="submitError"
+            type="error"
+            variant="tonal"
+            density="compact"
+            class="mt-3"
+          >
+            {{ submitError }}
+          </v-alert>
         </div>
       </v-card-text>
       <v-card-actions>
@@ -188,6 +207,7 @@ import type FragmentDto from '@/models/FragmentDto'
 import type CorrectionTaskDto from '@/models/CorrectionTaskDto'
 import RemoteService from '@/services/RemoteService'
 import { useAuthStore } from '@/stores/auth'
+import AnnotationCanvas from '@/components/AnnotationCanvas.vue'
 import {
   fragmentStatusLabel,
   fragmentStatusColor,
@@ -203,10 +223,15 @@ const search = ref('')
 const selected = ref<FragmentDto | null>(null)
 const drawer = ref(false)
 const imageUrl = ref<string | null>(null)
+// Annotated image object URL for the submitted-task (read-only) view.
+const submittedImageUrl = ref<string | null>(null)
 const existingTask = ref<CorrectionTaskDto | null>(null)
 const openTaskError = ref<string | null>(null)
 const gradeInput = ref<number | null>(null)
 const submitting = ref(false)
+const submitError = ref<string | null>(null)
+// Template ref to the canvas component (only mounted on open tasks).
+const canvasRef = ref<InstanceType<typeof AnnotationCanvas> | null>(null)
 
 const headers = [
   { title: 'ID', key: 'id', value: 'id', sortable: true },
@@ -243,6 +268,20 @@ const canSubmit = computed(() =>
   gradeInput.value != null && gradeInput.value >= 0
 )
 
+/** Open (editable) task: show the annotation canvas. Submitted tasks are
+ *  read-only — the teacher reviews their own annotation as a static image. */
+const canEdit = computed(
+  () => !!existingTask.value && existingTask.value.status !== 'SUBMITTED'
+)
+
+/** What the read-only (submitted) branch shows: the teacher's annotated image
+ *  when there is one (and it loaded), otherwise the raw fragment image. */
+const displayImageUrl = computed(() =>
+  existingTask.value?.hasAnnotation && submittedImageUrl.value
+    ? submittedImageUrl.value
+    : imageUrl.value
+)
+
 async function onRow(_: Event, row: { item: FragmentDto }) {
   await openFragment(row.item)
 }
@@ -252,10 +291,15 @@ async function openFragment(f: FragmentDto) {
   drawer.value = true
   existingTask.value = null
   openTaskError.value = null
+  submitError.value = null
   gradeInput.value = null
   if (imageUrl.value) {
     URL.revokeObjectURL(imageUrl.value)
     imageUrl.value = null
+  }
+  if (submittedImageUrl.value) {
+    URL.revokeObjectURL(submittedImageUrl.value)
+    submittedImageUrl.value = null
   }
   if (f.id == null) return
 
@@ -276,6 +320,19 @@ async function openFragment(f: FragmentDto) {
     gradeInput.value = mine[0]?.grade ?? null
     if (!existingTask.value) {
       openTaskError.value = 'Não tem tarefas atribuídas para este fragmento.'
+    } else if (
+      existingTask.value.status === 'SUBMITTED' &&
+      existingTask.value.hasAnnotation &&
+      existingTask.value.id != null
+    ) {
+      // Read-only review: load the teacher's own annotated image.
+      try {
+        submittedImageUrl.value = await RemoteService.getTaskAnnotatedImageUrl(
+          existingTask.value.id
+        )
+      } catch {
+        submittedImageUrl.value = null
+      }
     }
   } catch (err: any) {
     openTaskError.value = err?.message ?? 'Não foi possível carregar a tarefa.'
@@ -288,33 +345,32 @@ function closeDrawer() {
     URL.revokeObjectURL(imageUrl.value)
     imageUrl.value = null
   }
+  if (submittedImageUrl.value) {
+    URL.revokeObjectURL(submittedImageUrl.value)
+    submittedImageUrl.value = null
+  }
 }
 
 async function submitGrade() {
   if (!existingTask.value || existingTask.value.id == null) return
   if (gradeInput.value == null || gradeInput.value < 0) return
   submitting.value = true
+  submitError.value = null
   try {
-    const updated = await RemoteService.submitGrade(
+    // Composite the canvas (image + annotations) into a PNG. null when the
+    // teacher drew nothing → submit without an annotation.
+    const annotation = await canvasRef.value?.getBlob()
+    await RemoteService.submitGrade(
       existingTask.value.id,
-      gradeInput.value
+      gradeInput.value,
+      annotation
     )
-    existingTask.value = updated
-    // Reflect the new status in the table without a full reload.
-    if (selected.value) {
-      const idx = fragments.value.findIndex((x) => x.id === selected.value!.id)
-      if (idx >= 0) {
-        // @Transient — recompute locally from the updated task. A revision
-        // submission is REVISION_SUBMITTED, a primary one is CORRECTED.
-        const newStatus = updated.status === 'SUBMITTED'
-          ? (updated.phase === 'REVISION' ? 'REVISION_SUBMITTED' : 'CORRECTED')
-          : 'IN_CORRECTION'
-        fragments.value[idx] = {
-          ...fragments.value[idx],
-          status: newStatus
-        }
-      }
-    }
+    // Close the question dialog and refresh both lists (Por corrigir /
+    // Concluídas) from the backend so the split reflects the new state.
+    closeDrawer()
+    fragments.value = await RemoteService.getFragments()
+  } catch (err: any) {
+    submitError.value = err?.message ?? 'Não foi possível submeter a nota.'
   } finally {
     submitting.value = false
   }
@@ -330,5 +386,6 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   if (imageUrl.value) URL.revokeObjectURL(imageUrl.value)
+  if (submittedImageUrl.value) URL.revokeObjectURL(submittedImageUrl.value)
 })
 </script>

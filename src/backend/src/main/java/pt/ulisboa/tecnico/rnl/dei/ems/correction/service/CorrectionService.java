@@ -1,19 +1,25 @@
 package pt.ulisboa.tecnico.rnl.dei.ems.correction.service;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import pt.ulisboa.tecnico.rnl.dei.ems.correction.domain.CorrectionTask;
 import pt.ulisboa.tecnico.rnl.dei.ems.correction.domain.CorrectionTask.Status;
 import pt.ulisboa.tecnico.rnl.dei.ems.correction.dto.CorrectionTaskDto;
 import pt.ulisboa.tecnico.rnl.dei.ems.correction.dto.ReassignTaskRequest;
-import pt.ulisboa.tecnico.rnl.dei.ems.correction.dto.SubmitGradeRequest;
 import pt.ulisboa.tecnico.rnl.dei.ems.correction.repository.CorrectionTaskRepository;
 import pt.ulisboa.tecnico.rnl.dei.ems.audit.domain.AuditAction;
 import pt.ulisboa.tecnico.rnl.dei.ems.audit.service.AuditService;
@@ -51,6 +57,17 @@ public class CorrectionService {
 
 	@Autowired
 	private AuditService auditService;
+
+	@Value("${ems.storage.annotations-dir:./data/annotations}")
+	private String annotationsDir;
+
+	private void ensureAnnotationsDirExists() {
+		try {
+			Files.createDirectories(Paths.get(annotationsDir));
+		} catch (IOException e) {
+			throw new DEIException(ErrorMessage.FILE_STORAGE_ERROR);
+		}
+	}
 
 	/**
 	 * Builds the {@link CorrectionTaskDto} for a task. For {@code REVISION}
@@ -124,10 +141,13 @@ public class CorrectionService {
 
 	/**
 	 * Teacher submits a grade for their own task. Only the assigned teacher
-	 * may do this; only on still-open tasks. Grade must be >= 0.
+	 * may do this; only on still-open tasks. Grade must be >= 0. The optional
+	 * {@code annotation} is the composited PNG (fragment image + the teacher's
+	 * visual annotations) produced by the canvas tool — saved to disk and
+	 * exposed to the student in consultation (the definitive task's annotation).
 	 */
 	@Transactional
-	public CorrectionTaskDto submitGrade(long taskId, SubmitGradeRequest request) {
+	public CorrectionTaskDto submitGrade(long taskId, Double grade, MultipartFile annotation) {
 		Person current = SecurityUtils.currentPerson();
 		if (current == null) {
 			throw new DEIException(ErrorMessage.NOT_AUTHENTICATED);
@@ -141,7 +161,6 @@ public class CorrectionService {
 		if (task.getStatus() == Status.SUBMITTED) {
 			throw new DEIException(ErrorMessage.TASK_NOT_OPEN);
 		}
-		Double grade = request.grade();
 		if (grade == null || grade < 0) {
 			throw new DEIException(ErrorMessage.GRADE_NOT_VALID);
 		}
@@ -157,6 +176,21 @@ public class CorrectionService {
 						java.util.Comparator.nullsFirst(Instant::compareTo)))
 				.map(CorrectionTask::getGrade)
 				.orElse(null);
+
+		// Persist the annotated PNG (if any) before flipping the task to
+		// SUBMITTED, so the annotation is tied atomically to this grade.
+		boolean hasAnnotation = annotation != null && !annotation.isEmpty();
+		if (hasAnnotation) {
+			ensureAnnotationsDirExists();
+			Path target = Paths.get(annotationsDir).resolve(taskId + ".png");
+			try {
+				Files.copy(annotation.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+			} catch (IOException e) {
+				throw new DEIException(ErrorMessage.FILE_STORAGE_ERROR);
+			}
+			task.setAnnotatedImagePath(target.toString());
+		}
+
 		task.setGrade(grade);
 		task.setStatus(Status.SUBMITTED);
 		task.setSubmittedAt(Instant.now());
@@ -170,6 +204,9 @@ public class CorrectionService {
 				.append(" atribuiu a nota ").append(grade)
 				.append(" ao fragmento ").append(fragmentId)
 				.append(" (pergunta ").append(page).append(")");
+		if (hasAnnotation) {
+			desc.append(" com anotação visual");
+		}
 		if (prevDefinitive != null) {
 			desc.append("; anterior: ").append(prevDefinitive);
 		}
@@ -184,6 +221,34 @@ public class CorrectionService {
 		// and if so advance the exam from DISTRIBUTED to CORRECTED.
 		maybeMarkExamCorrected(task);
 		return toDto(task);
+	}
+
+	/**
+	 * Resolves the on-disk path of the annotated PNG submitted with a task, for
+	 * the {@code GET /correction-tasks/{id}/annotation} endpoint (the teacher
+	 * revisiting a submitted task). Gated like {@link #getTask}: the assigned
+	 * teacher or an admin/staff member.
+	 */
+	@Transactional
+	public Path annotatedImagePath(long taskId) {
+		Person current = SecurityUtils.currentPerson();
+		if (current == null) {
+			throw new DEIException(ErrorMessage.NOT_AUTHENTICATED);
+		}
+		CorrectionTask task = correctionTaskRepository.findById(taskId)
+				.orElseThrow(() -> new DEIException(ErrorMessage.NO_SUCH_CORRECTION_TASK, Long.toString(taskId)));
+		if (!canSeeAllTasks(current) && !task.getTeacher().getId().equals(current.getId())) {
+			throw new DEIException(ErrorMessage.NO_SUCH_CORRECTION_TASK, Long.toString(taskId));
+		}
+		String path = task.getAnnotatedImagePath();
+		if (path == null) {
+			throw new DEIException(ErrorMessage.ANNOTATION_NOT_FOUND);
+		}
+		Path resolved = Paths.get(path);
+		if (!Files.exists(resolved)) {
+			throw new DEIException(ErrorMessage.ANNOTATION_NOT_FOUND);
+		}
+		return resolved;
 	}
 
 	/**

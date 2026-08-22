@@ -65,7 +65,9 @@ public enum ErrorMessage {
 	NO_SUCH_REVISION_REQUEST("Não existe nenhum pedido de revisão com o ID %s", 7001),
 	REVISION_WINDOW_CLOSED("O prazo para pedir revisão deste exame já terminou ou a revisão já foi processada.", 7002),
 	REVISION_REQUEST_ALREADY_EXISTS("Já existe um pedido de revisão pendente para este exame.", 7003),
-	REVISION_ITEM_INVALID("Cada pergunta do pedido de revisão tem de pertencer ao exame e ter uma justificação.", 7004);
+	REVISION_ITEM_INVALID("Cada pergunta do pedido de revisão tem de pertencer ao exame e ter uma justificação.", 7004),
+
+	ANNOTATION_NOT_FOUND("A anotação não está disponível para este fragmento.", 5030);
 
 	private final String label;
 	private final int code;

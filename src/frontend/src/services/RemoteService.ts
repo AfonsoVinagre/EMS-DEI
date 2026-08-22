@@ -1,5 +1,15 @@
 import axios from 'axios'
 import type { AxiosResponse } from 'axios'
+
+// Allows specific calls to opt out of the global error toast — e.g. the
+// annotated-image probe, which uses a 400 ("no annotation yet") as a
+// control-flow signal and falls back to the raw image in the caller.
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    silenceError?: boolean
+  }
+}
+
 import { useAppearanceStore } from '@/stores/appearance'
 import { useAuthStore } from '@/stores/auth'
 import DeiError from '@/models/DeiError'
@@ -208,8 +218,42 @@ export default class RemoteServices {
     return httpClient.get('/correction-tasks')
   }
 
-  static async submitGrade(taskId: number, grade: number): Promise<CorrectionTaskDto> {
-    return httpClient.patch(`/correction-tasks/${taskId}/score`, { grade })
+  static async submitGrade(
+    taskId: number,
+    grade: number,
+    annotation?: Blob | null
+  ): Promise<CorrectionTaskDto> {
+    // Multipart so the optional annotated PNG (canvas composite) is uploaded
+    // atomically with the grade. axios sets the multipart boundary itself —
+    // do not set Content-Type manually. Returns the unwrapped response body
+    // (the response interceptor returns response.data), like the other methods.
+    const form = new FormData()
+    form.append('grade', String(grade))
+    if (annotation) form.append('annotation', annotation, 'annotation.png')
+    return httpClient.patch(`/correction-tasks/${taskId}/score`, form)
+  }
+
+  /** Annotated version of a fragment (definitive task's PNG) — for the student
+   *  consultation. Caller falls back to getFragmentImageUrl on error (no
+   *  annotation yet). Returns an object URL the caller must revoke. The 400
+   *  "no annotation" is silenced so it does not surface as a global toast. */
+  static async getAnnotatedImageUrl(fragmentId: number): Promise<string> {
+    const blob = (await httpClient.get(`/fragments/${fragmentId}/annotated-image`, {
+      responseType: 'blob',
+      silenceError: true
+    })) as unknown as Blob
+    return URL.createObjectURL(blob)
+  }
+
+  /** The annotated PNG submitted with a specific task — for the teacher
+   *  revisiting a submitted correction (read-only review of their annotation).
+   *  Silenced: on failure the caller falls back to the raw image. */
+  static async getTaskAnnotatedImageUrl(taskId: number): Promise<string> {
+    const blob = (await httpClient.get(`/correction-tasks/${taskId}/annotation`, {
+      responseType: 'blob',
+      silenceError: true
+    })) as unknown as Blob
+    return URL.createObjectURL(blob)
   }
 
   static async reassignTask(taskId: number, teacherId: number): Promise<CorrectionTaskDto> {
@@ -261,6 +305,13 @@ export default class RemoteServices {
     // guard sends the user back to the login page.
     if (error.response?.status === 401) {
       useAuthStore().logout()
+    }
+    // A call may use a non-2xx as a control-flow signal (e.g. the
+    // annotated-image probe returns 400 when there is no annotation, and the
+    // caller falls back to the raw image). Opt out of the global error toast
+    // for those — the caller handles the rejection itself.
+    if (error.config?.silenceError) {
+      throw error
     }
     const deiErr = new DeiError(
       await RemoteServices.errorMessage(error),

@@ -20,14 +20,16 @@ public record CorrectionTaskDto(
 		Double grade,
 		Instant assignedAt,
 		Instant submittedAt,
-		String revisionJustification) {
+		String revisionJustification,
+		boolean hasAnnotation) {
 
 	/**
 	 * Builds the DTO without a revision justification (PRIMARY tasks, or any
 	 * caller that does not need to surface the student's justification).
+	 * {@code hasAnnotation} is derived from the task's stored path.
 	 */
 	public CorrectionTaskDto(CorrectionTask task) {
-		this(task, null);
+		this(task, null, task.getAnnotatedImagePath() != null);
 	}
 
 	/**
@@ -37,6 +39,14 @@ public record CorrectionTaskDto(
 	 * revising teacher. Never persisted on the task itself.
 	 */
 	public CorrectionTaskDto(CorrectionTask task, String revisionJustification) {
+		this(task, revisionJustification, task.getAnnotatedImagePath() != null);
+	}
+
+	/**
+	 * Full constructor: lets the service pass the justification and the derived
+	 * {@code hasAnnotation} flag together.
+	 */
+	public CorrectionTaskDto(CorrectionTask task, String revisionJustification, boolean hasAnnotation) {
 		this(
 				task.getId(),
 				task.getFragment().getId(),
@@ -51,6 +61,7 @@ public record CorrectionTaskDto(
 				task.getGrade(),
 				task.getAssignedAt(),
 				task.getSubmittedAt(),
-				revisionJustification);
+				revisionJustification,
+				hasAnnotation);
 	}
 }

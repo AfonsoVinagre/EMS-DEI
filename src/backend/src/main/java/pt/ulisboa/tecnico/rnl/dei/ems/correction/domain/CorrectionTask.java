@@ -70,6 +70,16 @@ public class CorrectionTask {
 	@Column(name = "submitted_at")
 	private Instant submittedAt;
 
+	/**
+	 * Path to the composited PNG (fragment image + the teacher's visual
+	 * annotations) saved at submit time, or null when the teacher submitted a
+	 * grade without annotating. The annotated version is what the student sees
+	 * in consultation (the definitive task's annotation: REVISION if any,
+	 * falling back to PRIMARY).
+	 */
+	@Column(name = "annotated_image_path")
+	private String annotatedImagePath;
+
 	protected CorrectionTask() {
 	}
 

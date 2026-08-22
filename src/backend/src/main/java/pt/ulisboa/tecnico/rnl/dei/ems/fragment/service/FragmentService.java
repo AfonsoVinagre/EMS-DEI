@@ -193,4 +193,41 @@ public class FragmentService {
 	public InputStream openImage(Fragment fragment) throws IOException {
 		return Files.newInputStream(resolveImagePath(fragment));
 	}
+
+	/**
+	 * Resolves the on-disk path of the <em>definitive</em> task's annotated PNG
+	 * for a fragment — the annotation the student sees in consultation. The
+	 * definitive task is the submitted {@code REVISION} task if any (the final
+	 * grade set during revisão), falling back to the submitted {@code PRIMARY}
+	 * task — the same selection as {@link #computeGrade}. Gated by {@link #get}
+	 * (currentMaySee: student sees only own released exams, etc.).
+	 *
+	 * @throws DEIException {@link ErrorMessage#NO_SUCH_FRAGMENT} if the fragment
+	 *     does not exist or the caller may not see it; {@link ErrorMessage#ANNOTATION_NOT_FOUND}
+	 *     if the definitive task has no annotation (the frontend then falls
+	 *     back to the raw fragment image).
+	 */
+	@Transactional
+	public Path resolveDefinitiveAnnotatedImagePath(long fragmentId) {
+		// Gate: reuses currentMaySee (throws NO_SUCH_FRAGMENT if invisible).
+		get(fragmentId);
+		List<CorrectionTask> tasks = correctionTaskRepository.findByFragmentId(fragmentId);
+		CorrectionTask definitive = tasks.stream()
+				.filter(t -> t.getPhase() == CorrectionTask.Phase.REVISION
+						&& t.getStatus() == CorrectionTask.Status.SUBMITTED)
+				.findFirst()
+				.orElseGet(() -> tasks.stream()
+						.filter(t -> t.getPhase() == CorrectionTask.Phase.PRIMARY
+								&& t.getStatus() == CorrectionTask.Status.SUBMITTED)
+						.findFirst()
+						.orElse(null));
+		if (definitive == null || definitive.getAnnotatedImagePath() == null) {
+			throw new DEIException(ErrorMessage.ANNOTATION_NOT_FOUND);
+		}
+		Path resolved = Paths.get(definitive.getAnnotatedImagePath());
+		if (!Files.exists(resolved)) {
+			throw new DEIException(ErrorMessage.ANNOTATION_NOT_FOUND);
+		}
+		return resolved;
+	}
 }

@@ -212,8 +212,18 @@
         Pergunta {{ selected.pageNumber }}
       </v-card-title>
       <v-card-text>
-        <div class="text-left mb-2">
-          <strong>Nota:</strong> {{ selected.grade == null ? '--' : selected.grade }}
+        <div class="text-left mb-2 d-flex align-center">
+          <strong>Nota:</strong>
+          <span class="ml-1">{{ selected.grade == null ? '--' : selected.grade }}</span>
+          <v-spacer></v-spacer>
+          <v-chip
+            v-if="imageAnnotated"
+            color="info"
+            size="small"
+            variant="tonal"
+            prepend-icon="mdi-pencil-outline"
+            text="Anotada pelo professor"
+          ></v-chip>
         </div>
         <v-img
           v-if="imageUrl"
@@ -251,6 +261,9 @@ const pdfUrl = ref<string | null>(null)
 const drawer = ref(false)
 const selected = ref<FragmentDto | null>(null)
 const imageUrl = ref<string | null>(null)
+// True when the shown image is the teacher's annotated version (vs the raw
+// fragment image shown as a fallback when there is no annotation).
+const imageAnnotated = ref(false)
 
 // --- Revisão (Fase 5) ---
 const myRevision = ref<RevisionRequestDto | null>(null)
@@ -416,11 +429,19 @@ async function openFragment(item: FragmentDto) {
     URL.revokeObjectURL(imageUrl.value)
     imageUrl.value = null
   }
+  imageAnnotated.value = false
   if (item.id != null) {
+    // Prefer the annotated version (the teacher's visual corrections); fall
+    // back to the raw fragment image when there is no annotation (400).
     try {
-      imageUrl.value = await RemoteService.getFragmentImageUrl(item.id)
+      imageUrl.value = await RemoteService.getAnnotatedImageUrl(item.id)
+      imageAnnotated.value = true
     } catch {
-      imageUrl.value = null
+      try {
+        imageUrl.value = await RemoteService.getFragmentImageUrl(item.id)
+      } catch {
+        imageUrl.value = null
+      }
     }
   }
 }

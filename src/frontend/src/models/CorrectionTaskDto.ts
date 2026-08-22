@@ -13,6 +13,7 @@ export default class CorrectionTaskDto {
   assignedAt?: string
   submittedAt?: string | null
   revisionJustification?: string | null
+  hasAnnotation?: boolean
 
   constructor(obj?: Partial<CorrectionTaskDto>) {
     Object.assign(this, obj)
