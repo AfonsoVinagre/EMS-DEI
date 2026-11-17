@@ -36,13 +36,13 @@ public class CorrectionController {
 	}
 
 	@GetMapping("/correction-tasks/{id}")
-	@PreAuthorize("hasAuthority('EXAM_READ')")
+	@PreAuthorize("hasAuthority('EXAM_READ') and @fragmentAuthorization.canReadTask(#id)")
 	public CorrectionTaskDto get(@PathVariable long id) {
 		return correctionService.getTask(id);
 	}
 
 	@GetMapping("/fragments/{id}/tasks")
-	@PreAuthorize("hasAuthority('EXAM_READ')")
+	@PreAuthorize("hasAuthority('EXAM_READ') and @fragmentAuthorization.canReadFragment(#id)")
 	public List<CorrectionTaskDto> listByFragment(@PathVariable long id) {
 		return correctionService.listByFragment(id);
 	}
@@ -53,7 +53,7 @@ public class CorrectionController {
 	 * annotation is uploaded atomically with the grade in a single request.
 	 */
 	@PatchMapping("/correction-tasks/{id}/score")
-	@PreAuthorize("hasAuthority('EXAM_READ')")
+	@PreAuthorize("hasAuthority('EXAM_READ') and @fragmentAuthorization.canSubmitTask(#id)")
 	public CorrectionTaskDto submitGrade(@PathVariable long id,
 			@RequestParam Double grade,
 			@RequestParam(required = false) MultipartFile annotation) {
@@ -65,7 +65,7 @@ public class CorrectionController {
 	 * revisiting a submitted correction (read-only review of their annotation).
 	 */
 	@GetMapping("/correction-tasks/{id}/annotation")
-	@PreAuthorize("hasAuthority('EXAM_READ')")
+	@PreAuthorize("hasAuthority('EXAM_READ') and @fragmentAuthorization.canReadTask(#id)")
 	public ResponseEntity<InputStreamResource> getAnnotation(@PathVariable long id) throws IOException {
 		Path path = correctionService.annotatedImagePath(id);
 		InputStream stream = java.nio.file.Files.newInputStream(path);

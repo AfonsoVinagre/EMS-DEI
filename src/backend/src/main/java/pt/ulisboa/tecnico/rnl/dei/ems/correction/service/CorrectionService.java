@@ -35,6 +35,7 @@ import pt.ulisboa.tecnico.rnl.dei.ems.person.repository.PersonRepository;
 import pt.ulisboa.tecnico.rnl.dei.ems.revision.domain.RevisionItem;
 import pt.ulisboa.tecnico.rnl.dei.ems.revision.repository.RevisionItemRepository;
 import pt.ulisboa.tecnico.rnl.dei.ems.security.SecurityUtils;
+import pt.ulisboa.tecnico.rnl.dei.ems.security.FragmentAuthorization;
 
 @Service
 @Transactional
@@ -42,6 +43,9 @@ public class CorrectionService {
 
 	@Autowired
 	private CorrectionTaskRepository correctionTaskRepository;
+
+	@Autowired
+	private FragmentAuthorization fragmentAuthorization;
 
 	@Autowired
 	private FragmentRepository fragmentRepository;
@@ -100,7 +104,7 @@ public class CorrectionService {
 		List<CorrectionTask> tasks = canSeeAllTasks(current)
 				? correctionTaskRepository.findAll()
 				: correctionTaskRepository.findByTeacherId(current.getId());
-		return tasks.stream().map(this::toDto).toList();
+		return tasks.stream().filter(fragmentAuthorization::canReadTask).map(this::toDto).toList();
 	}
 
 	@Transactional
@@ -111,7 +115,7 @@ public class CorrectionService {
 		}
 		CorrectionTask task = correctionTaskRepository.findById(id)
 				.orElseThrow(() -> new DEIException(ErrorMessage.NO_SUCH_CORRECTION_TASK, Long.toString(id)));
-		if (!canSeeAllTasks(current) && !task.getTeacher().getId().equals(current.getId())) {
+		if (!fragmentAuthorization.canReadTask(task)) {
 			throw new DEIException(ErrorMessage.NO_SUCH_CORRECTION_TASK, Long.toString(id));
 		}
 		return toDto(task);
@@ -136,7 +140,7 @@ public class CorrectionService {
 					.filter(t -> t.getTeacher().getId().equals(current.getId()))
 					.toList();
 		}
-		return tasks.stream().map(this::toDto).toList();
+		return tasks.stream().filter(fragmentAuthorization::canReadTask).map(this::toDto).toList();
 	}
 
 	/**
@@ -155,7 +159,7 @@ public class CorrectionService {
 		CorrectionTask task = correctionTaskRepository.findById(taskId)
 				.orElseThrow(() -> new DEIException(ErrorMessage.NO_SUCH_CORRECTION_TASK, Long.toString(taskId)));
 
-		if (!task.getTeacher().getId().equals(current.getId())) {
+		if (!fragmentAuthorization.canSubmitTask(taskId)) {
 			throw new DEIException(ErrorMessage.NOT_THE_ASSIGNED_TEACHER);
 		}
 		if (task.getStatus() == Status.SUBMITTED) {
@@ -237,7 +241,7 @@ public class CorrectionService {
 		}
 		CorrectionTask task = correctionTaskRepository.findById(taskId)
 				.orElseThrow(() -> new DEIException(ErrorMessage.NO_SUCH_CORRECTION_TASK, Long.toString(taskId)));
-		if (!canSeeAllTasks(current) && !task.getTeacher().getId().equals(current.getId())) {
+		if (!fragmentAuthorization.canReadTask(task)) {
 			throw new DEIException(ErrorMessage.NO_SUCH_CORRECTION_TASK, Long.toString(taskId));
 		}
 		String path = task.getAnnotatedImagePath();

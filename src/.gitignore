@@ -3,6 +3,9 @@ target/
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**
 !**/src/test/**
+
+# Local authorization tests
+/backend/src/test/java/pt/ulisboa/tecnico/rnl/dei/ems/security/FragmentAuthorizationTest.java
 data/
 nano.save
 ### STS ###

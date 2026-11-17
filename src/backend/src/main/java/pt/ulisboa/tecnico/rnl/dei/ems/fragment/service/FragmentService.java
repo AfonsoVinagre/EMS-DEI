@@ -16,13 +16,14 @@ import pt.ulisboa.tecnico.rnl.dei.ems.correction.domain.CorrectionTask;
 import pt.ulisboa.tecnico.rnl.dei.ems.correction.repository.CorrectionTaskRepository;
 import pt.ulisboa.tecnico.rnl.dei.ems.exceptions.DEIException;
 import pt.ulisboa.tecnico.rnl.dei.ems.exceptions.ErrorMessage;
-import pt.ulisboa.tecnico.rnl.dei.ems.exam.domain.Exam;
 import pt.ulisboa.tecnico.rnl.dei.ems.fragment.domain.Fragment;
 import pt.ulisboa.tecnico.rnl.dei.ems.fragment.dto.FragmentDto;
 import pt.ulisboa.tecnico.rnl.dei.ems.fragment.repository.FragmentRepository;
 import pt.ulisboa.tecnico.rnl.dei.ems.person.domain.Person;
 import pt.ulisboa.tecnico.rnl.dei.ems.person.domain.Person.PersonType;
 import pt.ulisboa.tecnico.rnl.dei.ems.security.SecurityUtils;
+import pt.ulisboa.tecnico.rnl.dei.ems.security.FragmentAuthorization;
+import org.springframework.security.access.AccessDeniedException;
 
 /**
  * Fragment reads are role-filtered:
@@ -41,6 +42,9 @@ public class FragmentService {
 
 	@Autowired
 	private FragmentRepository fragmentRepository;
+
+	@Autowired
+	private FragmentAuthorization fragmentAuthorization;
 
 	@Autowired
 	private CorrectionTaskRepository correctionTaskRepository;
@@ -112,35 +116,6 @@ public class FragmentService {
 		fragment.setGrade(computeGrade(tasks));
 	}
 
-	private boolean currentMaySee(Fragment fragment) {
-		Person current = SecurityUtils.currentPerson();
-		if (current == null) {
-			return false;
-		}
-		PersonType type = current.getType();
-		if (type == PersonType.ADMINISTRATOR) {
-			return true;
-		}
-		if (type == PersonType.SCHOOL_STAFF) {
-			if (current.getSchool() == null) {
-				return false;
-			}
-			return fragment.getExam().getSchool().getId()
-					.equals(current.getSchool().getId());
-		}
-		if (type == PersonType.TEACHER) {
-			return correctionTaskRepository.findByFragmentId(fragment.getId()).stream()
-					.anyMatch(t -> t.getTeacher().getId().equals(current.getId()));
-		}
-		if (type == PersonType.STUDENT) {
-			// Consultation access: a student sees fragments only of their own
-			// exams once released. This gates listByExam, get(), and the
-			// fragment image endpoint (which calls get()).
-			return fragment.getExam().getStudent().getId().equals(current.getId())
-					&& fragment.getExam().getStatus() == Exam.ExamStatus.RELEASED;
-		}
-		return false;
-	}
 
 	@Transactional
 	public List<FragmentDto> listAll() {
@@ -150,7 +125,7 @@ public class FragmentService {
 		}
 		List<Fragment> all = fragmentRepository.findAll();
 		return all.stream()
-				.filter(this::currentMaySee)
+				.filter(fragmentAuthorization::canReadFragment)
 				.map(f -> {
 					populateStatusAndGrade(f, current);
 					return new FragmentDto(f, f.getStatus(), f.getGrade());
@@ -162,7 +137,7 @@ public class FragmentService {
 	public FragmentDto get(long id) {
 		Fragment fragment = fragmentRepository.findById(id)
 				.orElseThrow(() -> new DEIException(ErrorMessage.NO_SUCH_FRAGMENT, Long.toString(id)));
-		if (!currentMaySee(fragment)) {
+		if (!fragmentAuthorization.canReadFragment(fragment)) {
 			throw new DEIException(ErrorMessage.NO_SUCH_FRAGMENT, Long.toString(id));
 		}
 		populateStatusAndGrade(fragment, SecurityUtils.currentPerson());
@@ -174,7 +149,7 @@ public class FragmentService {
 		Person current = SecurityUtils.currentPerson();
 		List<Fragment> fragments = fragmentRepository.findByExamId(examId);
 		return fragments.stream()
-				.filter(this::currentMaySee)
+				.filter(fragmentAuthorization::canReadFragment)
 				.map(f -> {
 					populateStatusAndGrade(f, current);
 					return new FragmentDto(f, f.getStatus(), f.getGrade());
@@ -199,8 +174,8 @@ public class FragmentService {
 	 * for a fragment — the annotation the student sees in consultation. The
 	 * definitive task is the submitted {@code REVISION} task if any (the final
 	 * grade set during revisão), falling back to the submitted {@code PRIMARY}
-	 * task — the same selection as {@link #computeGrade}. Gated by {@link #get}
-	 * (currentMaySee: student sees only own released exams, etc.).
+	 * task — the same selection as {@link #computeGrade}. Gated by the shared authorization dependency
+	 * (teachers use their own task annotation; students see only own released exams).
 	 *
 	 * @throws DEIException {@link ErrorMessage#NO_SUCH_FRAGMENT} if the fragment
 	 *     does not exist or the caller may not see it; {@link ErrorMessage#ANNOTATION_NOT_FOUND}
@@ -209,7 +184,10 @@ public class FragmentService {
 	 */
 	@Transactional
 	public Path resolveDefinitiveAnnotatedImagePath(long fragmentId) {
-		// Gate: reuses currentMaySee (throws NO_SUCH_FRAGMENT if invisible).
+		// Teachers access annotations through their own correction task instead.
+		if (!fragmentAuthorization.canReadDefinitiveAnnotation(fragmentId)) {
+			throw new AccessDeniedException("Fragment annotation access denied");
+		}
 		get(fragmentId);
 		List<CorrectionTask> tasks = correctionTaskRepository.findByFragmentId(fragmentId);
 		CorrectionTask definitive = tasks.stream()

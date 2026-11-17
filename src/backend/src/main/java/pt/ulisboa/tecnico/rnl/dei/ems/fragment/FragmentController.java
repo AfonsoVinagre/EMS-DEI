@@ -40,7 +40,7 @@ public class FragmentController {
 	}
 
 	@GetMapping("/fragments/{id}")
-	@PreAuthorize("hasAuthority('EXAM_READ')")
+	@PreAuthorize("hasAuthority('EXAM_READ') and @fragmentAuthorization.canReadFragment(#id)")
 	public FragmentDto get(@PathVariable long id) {
 		return fragmentService.get(id);
 	}
@@ -52,7 +52,7 @@ public class FragmentController {
 	}
 
 	@GetMapping("/fragments/{id}/image")
-	@PreAuthorize("hasAuthority('EXAM_READ')")
+	@PreAuthorize("hasAuthority('EXAM_READ') and @fragmentAuthorization.canReadFragment(#id)")
 	public ResponseEntity<InputStreamResource> getImage(@PathVariable long id) throws IOException {
 		if (SecurityUtils.currentPerson() == null) {
 			throw new DEIException(ErrorMessage.NOT_AUTHENTICATED);
@@ -80,7 +80,7 @@ public class FragmentController {
 	 * annotation, so the frontend can fall back to {@code getImage}.
 	 */
 	@GetMapping("/fragments/{id}/annotated-image")
-	@PreAuthorize("hasAuthority('EXAM_READ')")
+	@PreAuthorize("hasAuthority('EXAM_READ') and @fragmentAuthorization.canReadDefinitiveAnnotation(#id)")
 	public ResponseEntity<InputStreamResource> getAnnotatedImage(@PathVariable long id) throws IOException {
 		if (SecurityUtils.currentPerson() == null) {
 			throw new DEIException(ErrorMessage.NOT_AUTHENTICATED);
